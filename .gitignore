@@ -3,13 +3,8 @@ app/.state.json
 __pycache__/
 app/packages/
 app/.packages/
-app/scripts/
 
 # Generated
 app/hwntools.vbs
 app/VERSION.md
 app/.claude/
-
-# Dev
-app/package-manager-plan.md
-custom-scripts/
