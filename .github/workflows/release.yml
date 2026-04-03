@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify tag is on main
         run: |
@@ -23,8 +25,27 @@ jobs:
             exit 1
           fi
 
+      - name: Generate VERSION.md
+        run: |
+          TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1)
+          {
+            echo "# HWN Tools ${TAG}"
+            echo ""
+            echo "Released: $(date -u +%Y-%m-%d)"
+            echo ""
+            echo "## Changes"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges
+            else
+              git log --pretty=format:"- %s" --no-merges
+            fi
+            echo ""
+          } > app/VERSION.md
+
       - name: Create hwntools.zip from app/
-        run: cd app && zip -r ../hwntools.zip . -x '__pycache__/*' '*.pyc' '.state.json' 'packages/*' '.packages/*' 'hwntools.vbs'
+        run: cd app && zip -r ../hwntools.zip . -x '__pycache__/*' '*.pyc' '.state.json' 'packages/*' '.packages/*' 'hwntools.vbs' 'CLAUDE.md'
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
