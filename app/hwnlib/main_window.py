@@ -6,14 +6,15 @@ from gi.repository import Gtk, Gdk, Gio, Pango, GLib
 
 from .config import parse_config, label_from_filename, subsequence_match
 from .constants import (
-    ROOT_DIR, PACKAGES_DIR, PLATFORM, ICON_SIZE,
+    VERSION, ROOT_DIR, PACKAGES_DIR, PLATFORM, ICON_SIZE,
     DEFAULT_SCRIPT_ICON, DEFAULT_FOLDER_ICON, CSS,
 )
 from .deps import check_dependencies
 from .dialogs import OutputDialog, DepDialog
-from .git_packages import _check_repo_updates
+from .git_packages import _check_repo_updates, _check_app_update
 from .sources_manager import SourcesManager
 from .state import load_state, save_state
+from .update_manager import UpdateManager
 
 
 class HwnTools(Gtk.Window):
@@ -56,21 +57,32 @@ class HwnTools(Gtk.Window):
         header_bar.set_title("HWN Tools")
 
         self.updates_available = {}
+        self._app_update_available = False
         menu_btn = Gtk.MenuButton()
         menu_btn.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", ICON_SIZE))
         popover = Gtk.Popover()
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         menu_box.set_margin_top(4)
         menu_box.set_margin_bottom(4)
-        for label, icon_name, handler in [
-            ("Manage Script Sources", "folder-open-symbolic", self.on_manage_sources),
-            ("Help", "help-browser-symbolic", self.on_help),
+        self._menu_dots = {}
+        for key, label, icon_name, handler in [
+            ("packages", "Manage Script Sources", "folder-open-symbolic", self.on_manage_sources),
+            ("app", "Update HWN Tools", "software-update-available-symbolic", self.on_update_app),
+            (None, "Help", "help-browser-symbolic", self.on_help),
         ]:
             item = Gtk.Button()
             item.set_relief(Gtk.ReliefStyle.NONE)
             hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             hbox.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU), False, False, 0)
             hbox.pack_start(Gtk.Label(label=label, xalign=0), True, True, 0)
+            if key:
+                dot = Gtk.DrawingArea()
+                dot.set_size_request(8, 8)
+                dot.set_valign(Gtk.Align.CENTER)
+                dot.set_no_show_all(True)
+                dot.connect("draw", self._draw_menu_dot)
+                hbox.pack_end(dot, False, False, 4)
+                self._menu_dots[key] = dot
             item.add(hbox)
             item.connect("clicked", lambda b, h=handler: (popover.popdown(), h(b)))
             menu_box.pack_start(item, False, False, 0)
@@ -119,9 +131,7 @@ class HwnTools(Gtk.Window):
         self.nav_bar.pack_end(self.path_label, True, True, 4)
 
         vbox.pack_start(self.nav_bar, False, False, 0)
-
-        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        vbox.pack_start(sep, False, False, 0)
+        vbox.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 0)
 
         self.scrolled = Gtk.ScrolledWindow()
         self.scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -143,13 +153,17 @@ class HwnTools(Gtk.Window):
         cr.fill()
         return False
 
-    def _check_for_updates(self):
-        repos = load_state().get("package_repos", [])
-        if not repos:
-            return
+    @staticmethod
+    def _draw_menu_dot(widget, cr):
+        cr.set_source_rgb(0.8, 0.1, 0.1)
+        cr.arc(4, 4, 4, 0, 2 * 3.14159)
+        cr.fill()
+        return False
 
+    def _check_for_updates(self):
         def worker():
             results = {}
+            repos = load_state().get("package_repos", [])
             for repo in repos:
                 url = repo.get("url", "")
                 if not url:
@@ -160,22 +174,39 @@ class HwnTools(Gtk.Window):
                         results[url] = updatable
                 except Exception:
                     continue
-            GLib.idle_add(self._on_update_check_done, results)
-
+            app_update = False
+            try:
+                remote_ver, has_update, error = _check_app_update()
+                if has_update:
+                    app_update = True
+            except Exception:
+                pass
+            GLib.idle_add(self._on_update_check_done, results, app_update)
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_update_check_done(self, results):
+    def _on_update_check_done(self, results, app_update=False):
         self.updates_available = results
-        total = sum(len(v) for v in results.values())
-        if total > 0:
+        self._app_update_available = app_update
+        self._update_dot_state()
+
+    def _update_dot_state(self):
+        pkg_total = sum(len(v) for v in self.updates_available.values())
+        parts = []
+        if self._app_update_available:
+            parts.append("HWN Tools update available")
+        if pkg_total > 0:
+            parts.append(f"{pkg_total} package update{'s' if pkg_total != 1 else ''}")
+        if parts:
             self._show_update_dot = True
-            self.menu_btn.set_tooltip_text(
-                f"{total} package update{'s' if total != 1 else ''} available"
-            )
+            self.menu_btn.set_tooltip_text(", ".join(parts))
         else:
             self._show_update_dot = False
             self.menu_btn.set_tooltip_text(None)
         self.menu_btn.queue_draw()
+        if "packages" in self._menu_dots:
+            self._menu_dots["packages"].show() if pkg_total > 0 else self._menu_dots["packages"].hide()
+        if "app" in self._menu_dots:
+            self._menu_dots["app"].show() if self._app_update_available else self._menu_dots["app"].hide()
 
     def update_nav_bar(self):
         if self.tree_mode or self.search_mode:
@@ -194,6 +225,16 @@ class HwnTools(Gtk.Window):
             rel = self._virtual_relpath(self.current_path)
             self.path_label.set_text("/" if rel == "." else "/" + rel)
 
+    def _has_visible_content(self, directory):
+        hidden = set(load_state().get("hidden_scripts", []))
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and not d.startswith("_")]
+            for f in files:
+                if f.endswith((".sh", ".py")) and not f.startswith("_") and not f.startswith("."):
+                    if os.path.join(root, f) not in hidden:
+                        return True
+        return False
+
     def _scan_directory(self, directory):
         folders = []
         scripts = []
@@ -206,9 +247,7 @@ class HwnTools(Gtk.Window):
                 else:
                     src_path, src_label = src["path"], src.get("label", "")
                 real_src = os.path.normpath(os.path.realpath(src_path))
-                cyclic = (pkg_root == real_src
-                          or pkg_root.startswith(real_src + os.sep)
-                          or real_src.startswith(pkg_root + os.sep))
+                cyclic = (pkg_root == real_src or pkg_root.startswith(real_src + os.sep) or real_src.startswith(pkg_root + os.sep))
                 name = os.path.basename(src_path)
                 missing = cyclic or not os.path.isdir(src_path)
                 if not missing:
@@ -218,7 +257,6 @@ class HwnTools(Gtk.Window):
                     config = {}
                 sort_label = (src_label or config.get("label", label_from_filename(name))).lower()
                 folders.append((name, src_path, src_label or None, missing, config.get("order"), sort_label))
-
             if os.path.isdir(PACKAGES_DIR):
                 existing_paths = {os.path.normpath(os.path.realpath(f[1])) for f in folders}
                 for pkg_name in os.listdir(PACKAGES_DIR):
@@ -268,6 +306,12 @@ class HwnTools(Gtk.Window):
         scripts.sort(key=_sort_key)
         folders = [(name, path, ovr, miss) for name, path, ovr, miss, _o, _s in folders]
         scripts = [(name, path) for name, path, _o, _s in scripts]
+
+        hidden = set(load_state().get("hidden_scripts", []))
+        if hidden:
+            scripts = [(name, path) for name, path in scripts if path not in hidden]
+            folders = [(name, path, ovr, miss) for name, path, ovr, miss in folders
+                       if miss or self._has_visible_content(path)]
         return folders, scripts
 
     def _source_display_name(self, src_path, src_entry):
@@ -282,6 +326,8 @@ class HwnTools(Gtk.Window):
 
     def _virtual_relpath(self, path):
         real = os.path.realpath(path)
+        if real == os.path.realpath(ROOT_DIR):
+            return "."
         for src in load_state().get("script_sources", []):
             s = src if isinstance(src, str) else src["path"]
             sr = os.path.realpath(s)
@@ -303,15 +349,30 @@ class HwnTools(Gtk.Window):
             return os.path.join(base, *parts[1:])
         return os.path.basename(path)
 
+    def _is_favorite(self, script_path):
+        favorites = load_state().get("favorites", [])
+        return os.path.realpath(script_path) in [os.path.realpath(f) for f in favorites]
+
+    def _toggle_favorite(self, script_path):
+        state = load_state()
+        favorites = state.get("favorites", [])
+        real = os.path.realpath(script_path)
+        existing = [f for f in favorites if os.path.realpath(f) == real]
+        if existing:
+            for f in existing:
+                favorites.remove(f)
+        else:
+            favorites.append(script_path)
+        state["favorites"] = favorites
+        save_state(state)
+
     def populate(self, directory):
         self.current_path = directory
         self.buttons = []
         self.focused_index = 0
-
         child = self.scrolled.get_child()
         if child:
             self.scrolled.remove(child)
-
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
@@ -328,37 +389,83 @@ class HwnTools(Gtk.Window):
         if at_root:
             self.effective_root = ROOT_DIR
 
+        at_effective_root = os.path.realpath(directory) == os.path.realpath(self.effective_root)
+        fav_count = 0
+        if at_effective_root:
+            state = load_state()
+            favorites = state.get("favorites", [])
+            valid_favorites = [f for f in favorites if os.path.exists(f)]
+            if len(valid_favorites) != len(favorites):
+                state["favorites"] = valid_favorites
+                save_state(state)
+                favorites = valid_favorites
+            for fav_path in favorites:
+                is_dir = os.path.isdir(fav_path)
+                if is_dir:
+                    config_file = os.path.join(fav_path, ".config")
+                    config = parse_config(config_file) if os.path.isfile(config_file) else {}
+                    label = config.get("label", label_from_filename(os.path.basename(fav_path)))
+                    icon = config.get("icon", DEFAULT_FOLDER_ICON)
+                    wrapper = self.make_button(icon, label, script_path=fav_path)
+                    wrapper._inner_btn.get_style_context().add_class("folder-btn")
+                    wrapper._inner_btn.connect("clicked", self.on_folder_click, fav_path)
+                else:
+                    config = parse_config(fav_path)
+                    label = config.get("label", label_from_filename(os.path.basename(fav_path)))
+                    icon = config.get("icon", DEFAULT_SCRIPT_ICON)
+                    wrapper = self.make_button(icon, label, script_path=fav_path)
+                    wrapper._inner_btn.connect("clicked", self.on_script_click, fav_path)
+                box.pack_start(wrapper, False, False, 0)
+                wrapper._inner_btn._path = fav_path
+                self.buttons.append(wrapper._inner_btn)
+                fav_count += 1
+            if fav_count > 0 and (folders or scripts):
+                box.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 2)
+
         for name, path in scripts:
             if not os.access(path, os.X_OK):
                 os.chmod(path, os.stat(path).st_mode | 0o755)
 
+        fav_reals = set()
+        if at_effective_root:
+            fav_reals = {os.path.realpath(f) for f in load_state().get("favorites", [])}
+
         for name, path, override_label, missing in folders:
+            if os.path.realpath(path) in fav_reals:
+                continue
             config_file = os.path.join(path, ".config")
             config = parse_config(config_file) if not missing and os.path.isfile(config_file) else {}
             label = override_label or config.get("label", label_from_filename(name))
             icon = config.get("icon", DEFAULT_FOLDER_ICON)
-            btn = self.make_button(icon, label, missing=missing)
-            btn.get_style_context().add_class("folder-btn")
-            if missing:
-                btn.set_tooltip_text(f"Path not found: {path}")
-                btn.connect("clicked", lambda *a: None)
+            wrapper = self.make_button(icon, label, missing=missing, script_path=path if not missing else None)
+            if hasattr(wrapper, '_inner_btn'):
+                inner = wrapper._inner_btn
             else:
-                btn.connect("clicked", self.on_folder_click, path)
-            box.pack_start(btn, False, False, 0)
-            self.buttons.append(btn)
+                inner = wrapper
+            inner.get_style_context().add_class("folder-btn")
+            if missing:
+                inner.set_tooltip_text(f"Path not found: {path}")
+                inner.connect("clicked", lambda *a: None)
+            else:
+                inner.connect("clicked", self.on_folder_click, path)
+            box.pack_start(wrapper, False, False, 0)
+            inner._path = path
+            self.buttons.append(inner)
 
         for name, path in scripts:
+            if os.path.realpath(path) in fav_reals:
+                continue
             config = parse_config(path)
             label = config.get("label", label_from_filename(name))
             icon = config.get("icon", DEFAULT_SCRIPT_ICON)
-            btn = self.make_button(icon, label)
-            btn.connect("clicked", self.on_script_click, path)
-            box.pack_start(btn, False, False, 0)
-            self.buttons.append(btn)
+            wrapper = self.make_button(icon, label, script_path=path)
+            wrapper._inner_btn.connect("clicked", self.on_script_click, path)
+            wrapper._inner_btn._path = path
+            box.pack_start(wrapper, False, False, 0)
+            self.buttons.append(wrapper._inner_btn)
 
-        if not folders and not scripts:
-            at_root = os.path.realpath(directory) == os.path.realpath(ROOT_DIR)
-            if at_root:
+        if not folders and not scripts and fav_count == 0:
+            if os.path.realpath(directory) == os.path.realpath(ROOT_DIR):
                 empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
                 empty_box.set_valign(Gtk.Align.CENTER)
                 empty_box.set_halign(Gtk.Align.CENTER)
@@ -371,17 +478,15 @@ class HwnTools(Gtk.Window):
                 empty_box.pack_start(open_btn, False, False, 0)
                 box.pack_start(empty_box, True, True, 20)
             else:
-                empty = Gtk.Label(label="No scripts found")
-                box.pack_start(empty, True, True, 20)
+                box.pack_start(Gtk.Label(label="No scripts found"), True, True, 20)
 
         self.scrolled.add(box)
         self.show_all()
         self.update_nav_bar()
-
         if self.buttons:
             self.buttons[0].grab_focus()
 
-    def make_button(self, icon_name, label, is_back=False, missing=False):
+    def make_button(self, icon_name, label, is_back=False, missing=False, script_path=None):
         btn = Gtk.Button()
         btn.get_style_context().add_class("tool-btn")
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -395,7 +500,51 @@ class HwnTools(Gtk.Window):
         hbox.pack_start(image, False, False, 0)
         hbox.pack_start(lbl, True, True, 0)
         btn.add(hbox)
-        return btn
+
+        if not script_path:
+            return btn
+
+        is_fav = self._is_favorite(script_path)
+        star_icon = "starred-symbolic" if is_fav else "non-starred-symbolic"
+        star_img = Gtk.Image.new_from_icon_name(star_icon, Gtk.IconSize.MENU)
+        star_img.set_opacity(1.0 if is_fav else 0.3)
+        if is_fav:
+            star_img.get_style_context().add_class("star-favorite")
+
+        star_btn = Gtk.Button()
+        star_btn.add(star_img)
+
+        def on_star_clicked(widget, sp=script_path):
+            self._toggle_favorite(sp)
+            self.refresh_view()
+        star_btn.connect("clicked", on_star_clicked)
+
+        def on_star_enter(widget, event, si=star_img):
+            si.get_style_context().add_class("star-favorite")
+            si.set_opacity(1.0)
+            return False
+        def on_star_leave(widget, event, si=star_img, sp=script_path):
+            if not self._is_favorite(sp):
+                si.get_style_context().remove_class("star-favorite")
+                si.set_opacity(0.3)
+            return False
+        star_btn.connect("enter-notify-event", on_star_enter)
+        star_btn.connect("leave-notify-event", on_star_leave)
+
+        def on_state_changed(widget, flags, si=star_img, sp=script_path):
+            if self._is_favorite(sp):
+                si.set_opacity(1.0)
+            elif widget.is_focus() or widget.get_state_flags() & Gtk.StateFlags.PRELIGHT:
+                si.set_opacity(0.5)
+            else:
+                si.set_opacity(0.3)
+        btn.connect("state-flags-changed", on_state_changed)
+
+        wrapper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        wrapper.pack_start(btn, True, True, 0)
+        wrapper.pack_end(star_btn, False, False, 0)
+        wrapper._inner_btn = btn
+        return wrapper
 
     def collect_all_entries(self, directory=None, _visited=None, _at_root=None):
         if directory is None:
@@ -434,11 +583,9 @@ class HwnTools(Gtk.Window):
     def populate_search(self):
         self.buttons = []
         self.focused_index = 0
-
         child = self.scrolled.get_child()
         if child:
             self.scrolled.remove(child)
-
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
@@ -469,28 +616,30 @@ class HwnTools(Gtk.Window):
             header.set_margin_start(4)
             header.set_margin_top(4 if not self.buttons else 8)
             box.pack_start(header, False, False, 0)
-
             for label, icon, path, is_folder, missing in items:
-                btn = self.make_button(icon, label, missing=missing)
                 if is_folder:
+                    btn = self.make_button(icon, label, missing=missing)
                     btn.get_style_context().add_class("folder-btn")
                     if not missing:
                         btn.connect("clicked", self.on_search_folder_click, path)
                     else:
                         btn.connect("clicked", lambda *a: None)
+                    btn._path = path
+                    box.pack_start(btn, False, False, 0)
+                    self.buttons.append(btn)
                 else:
-                    btn.connect("clicked", self.on_script_click, path)
-                box.pack_start(btn, False, False, 0)
-                self.buttons.append(btn)
+                    wrapper = self.make_button(icon, label, missing=missing, script_path=path)
+                    wrapper._inner_btn._path = path
+                    wrapper._inner_btn.connect("clicked", self.on_script_click, path)
+                    box.pack_start(wrapper, False, False, 0)
+                    self.buttons.append(wrapper._inner_btn)
 
         if not matches:
-            empty = Gtk.Label(label="No matches")
-            box.pack_start(empty, True, True, 20)
+            box.pack_start(Gtk.Label(label="No matches"), True, True, 20)
 
         self.scrolled.add(box)
         self.show_all()
         self.update_nav_bar()
-
         if self.buttons:
             self.buttons[0].grab_focus()
 
@@ -534,14 +683,15 @@ class HwnTools(Gtk.Window):
                 results.extend(self.collect_tree_entries(path, ancestor_last + [is_last], _visited))
         return results
 
-    def make_tree_row(self, icon_name, label, prefix, is_folder, missing=False):
-        ebox = Gtk.EventBox()
+    def make_tree_row(self, icon_name, label, prefix, is_folder, missing=False, script_path=None):
+        ebox = Gtk.Button()
+        ebox.set_relief(Gtk.ReliefStyle.NONE)
+        ebox.get_style_context().add_class("tree-row")
         if not is_folder and not missing:
             ebox.set_can_focus(True)
-            ebox.get_style_context().add_class("tree-row")
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        hbox.set_margin_top(2)
-        hbox.set_margin_bottom(2)
+        hbox.set_margin_top(0)
+        hbox.set_margin_bottom(0)
         if prefix:
             prefix_lbl = Gtk.Label(label=prefix)
             prefix_lbl.override_font(Pango.FontDescription("monospace"))
@@ -559,24 +709,53 @@ class HwnTools(Gtk.Window):
             lbl.set_text(label)
         hbox.pack_start(lbl, True, True, 0)
         ebox.add(hbox)
+
+        if script_path and not missing:
+            is_fav = self._is_favorite(script_path)
+            star_icon = "starred-symbolic" if is_fav else "non-starred-symbolic"
+            star_img = Gtk.Image.new_from_icon_name(star_icon, Gtk.IconSize.MENU)
+            star_img.set_opacity(1.0 if is_fav else 0.3)
+            if is_fav:
+                star_img.get_style_context().add_class("star-favorite")
+            star_btn = Gtk.Button()
+            star_btn.set_relief(Gtk.ReliefStyle.NONE)
+            star_btn.get_style_context().add_class("star-btn")
+            star_btn.add(star_img)
+            def on_star_clicked(widget, sp=script_path):
+                self._toggle_favorite(sp)
+                self.refresh_view()
+            star_btn.connect("clicked", on_star_clicked)
+            def on_star_enter(widget, event, si=star_img):
+                si.get_style_context().add_class("star-favorite")
+                si.set_opacity(1.0)
+                return False
+            def on_star_leave(widget, event, si=star_img, sp=script_path):
+                if not self._is_favorite(sp):
+                    si.get_style_context().remove_class("star-favorite")
+                    si.set_opacity(0.3)
+                return False
+            star_btn.connect("enter-notify-event", on_star_enter)
+            star_btn.connect("leave-notify-event", on_star_leave)
+            wrapper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            wrapper.pack_start(ebox, True, True, 0)
+            wrapper.pack_end(star_btn, False, False, 0)
+            wrapper._inner_btn = ebox
+            return wrapper
         return ebox
 
     def populate_tree(self):
         self.buttons = []
         self.focused_index = 0
-
         child = self.scrolled.get_child()
         if child:
             self.scrolled.remove(child)
-
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
-        box.set_margin_start(10)
-        box.set_margin_end(10)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
 
         all_entries = self.collect_tree_entries()
-
         if self.search_query:
             all_entries = [
                 e for e in all_entries
@@ -585,18 +764,18 @@ class HwnTools(Gtk.Window):
             ]
 
         for label, icon, path, rel_path, is_folder, prefix, missing, _search in all_entries:
-            row = self.make_tree_row(icon, label, prefix, is_folder, missing=missing)
+            widget = self.make_tree_row(icon, label, prefix, is_folder, missing=missing, script_path=path)
             if not is_folder and not missing:
-                row._activate = lambda p=path: self.on_script_click(None, p)
-                row.connect("button-press-event",
-                            lambda w, e, p=path: self.on_script_click(w, p))
-                self.buttons.append(row)
-            box.pack_start(row, False, False, 0)
+                inner = widget._inner_btn if hasattr(widget, '_inner_btn') else widget
+                inner._activate = lambda p=path: self.on_script_click(None, p)
+                inner._path = path
+                inner.connect("clicked", lambda w, p=path: self.on_script_click(w, p))
+                self.buttons.append(inner)
+            box.pack_start(widget, False, False, 0)
 
         if not all_entries:
             if self.search_query:
-                empty = Gtk.Label(label="No matches")
-                box.pack_start(empty, True, True, 20)
+                box.pack_start(Gtk.Label(label="No matches"), True, True, 20)
             else:
                 empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
                 empty_box.set_valign(Gtk.Align.CENTER)
@@ -613,7 +792,6 @@ class HwnTools(Gtk.Window):
         self.scrolled.add(box)
         self.show_all()
         self.update_nav_bar()
-
         if self.buttons:
             self.buttons[0].grab_focus()
 
@@ -668,8 +846,7 @@ class HwnTools(Gtk.Window):
 
     def on_back(self, *args):
         if self.history:
-            prev = self.history.pop()
-            self.populate(prev)
+            self.populate(self.history.pop())
 
     def on_top(self, *args):
         if os.path.realpath(self.current_path) != os.path.realpath(self.effective_root):
@@ -678,7 +855,6 @@ class HwnTools(Gtk.Window):
 
     def on_key(self, widget, event):
         key = event.keyval
-
         if key == Gdk.KEY_Escape:
             now = GLib.get_monotonic_time() / 1_000_000
             if self.search_mode:
@@ -690,7 +866,6 @@ class HwnTools(Gtk.Window):
                 return True
             self.last_esc_time = now
             return False
-
         if key == Gdk.KEY_t and event.state & Gdk.ModifierType.CONTROL_MASK:
             self.search_mode = False
             self.search_query = ""
@@ -703,17 +878,22 @@ class HwnTools(Gtk.Window):
             else:
                 self.populate(self.current_path)
             return True
-
+        if key == Gdk.KEY_f and event.state & Gdk.ModifierType.CONTROL_MASK:
+            if self.buttons and self.focused_index < len(self.buttons):
+                btn = self.buttons[self.focused_index]
+                path = getattr(btn, '_path', None)
+                if path:
+                    self._toggle_favorite(path)
+                    self.refresh_view()
+            return True
         if key == Gdk.KEY_F1:
             self.on_help()
             return True
-
         if key == Gdk.KEY_F5:
             if self.search_mode:
                 self.exit_search()
             self.populate(self.current_path)
             return True
-
         if key == Gdk.KEY_BackSpace:
             if self.search_mode:
                 if self.search_query:
@@ -729,13 +909,11 @@ class HwnTools(Gtk.Window):
             if not self.tree_mode:
                 self.on_back()
             return True
-
         if key == Gdk.KEY_Home:
             if self.search_mode:
                 self.exit_search()
             self.on_top()
             return True
-
         if key in (Gdk.KEY_Up, Gdk.KEY_Down) and self.buttons:
             if key == Gdk.KEY_Up:
                 self.focused_index = max(0, self.focused_index - 1)
@@ -743,15 +921,13 @@ class HwnTools(Gtk.Window):
                 self.focused_index = min(len(self.buttons) - 1, self.focused_index + 1)
             self.buttons[self.focused_index].grab_focus()
             return True
-
         if key in (Gdk.KEY_Return, Gdk.KEY_KP_Enter) and self.buttons:
-            widget = self.buttons[self.focused_index]
-            if hasattr(widget, '_activate'):
-                widget._activate()
+            w = self.buttons[self.focused_index]
+            if hasattr(w, '_activate'):
+                w._activate()
             else:
-                widget.clicked()
+                w.clicked()
             return True
-
         char = chr(key) if 32 <= key <= 126 else None
         if char is None and key >= 0xfe00:
             char = event.string if event.string and event.string.isprintable() else None
@@ -763,11 +939,13 @@ class HwnTools(Gtk.Window):
             else:
                 self.populate_search()
             return True
-
         return False
 
     def on_manage_sources(self, *args):
         SourcesManager(self)
+
+    def on_update_app(self, *args):
+        UpdateManager(self)
 
     def refresh_view(self):
         if self.search_mode:
@@ -778,7 +956,7 @@ class HwnTools(Gtk.Window):
         elif self.tree_mode:
             self.populate_tree()
         else:
-            self.populate(self.current_path)
+            self.populate(ROOT_DIR)
 
     def on_help(self, *args):
         shortcuts = [
@@ -791,6 +969,7 @@ class HwnTools(Gtk.Window):
             ("Esc", "Clear search"),
             ("Esc \u00d7 2", "Close app (within 250ms)"),
             ("Ctrl+T", "Toggle tree / button view"),
+            ("Ctrl+F", "Toggle favorite"),
             ("F1", "Show this help"),
         ]
         dialog = Gtk.Dialog(title="Keyboard Shortcuts", transient_for=self, modal=True)
@@ -838,5 +1017,4 @@ class HwnTools(Gtk.Window):
         OutputDialog(self, title, script_path)
 
     def show_dep_error(self, script_path, failures):
-        dialog = DepDialog(self, script_path, failures)
-        dialog.show_all()
+        DepDialog(self, script_path, failures).show_all()

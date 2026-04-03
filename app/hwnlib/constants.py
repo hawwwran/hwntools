@@ -2,6 +2,8 @@ import os
 
 from gi.repository import Gtk
 
+VERSION = "0.1.1"
+
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = APP_DIR  # Virtual root sentinel — not scanned for scripts
 PACKAGES_DIR = os.path.join(APP_DIR, "packages")
@@ -24,6 +26,10 @@ button.tool-btn:focus label {
 button.folder-btn label {
     font-weight: bold;
 }
+.tree-row {
+    padding: 0;
+    min-height: 0;
+}
 .tree-row:focus {
     border-radius: 4px;
     background-image: linear-gradient(alpha(@theme_selected_bg_color, 0.25), alpha(@theme_selected_bg_color, 0.25));
@@ -31,5 +37,14 @@ button.folder-btn label {
 .terminal-header {
     color: #888;
     font-size: 0.9em;
+}
+.star-favorite {
+    color: #f5c211;
+    -gtk-icon-style: symbolic;
+}
+.star-btn {
+    padding: 0;
+    min-height: 0;
+    min-width: 0;
 }
 """

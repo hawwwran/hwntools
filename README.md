@@ -8,8 +8,10 @@ GTK script launcher with built-in terminal. Organize and run shell and Python sc
 - Built-in VTE terminal with full interactive support, ANSI colors
 - Two views: button grid and tree view (toggle with Ctrl+T)
 - Fuzzy search — just start typing
-- Script sources from local folders or package servers
-- Package manager for installing and updating script packages
+- Favorite scripts and folders — pinned to root with a star
+- Script sources from local folders or git-based package repositories
+- Package manager for installing, updating, and toggling script visibility
+- Built-in app updater with automatic update checks
 - Works on Linux natively and on Windows via WSLg
 - Keyboard-driven — navigate, search, and launch without a mouse
 
@@ -73,6 +75,7 @@ Folders support a `.config` file with the same format for `@label`, `@icon`, `@o
 | Esc | Clear search / close output |
 | Esc x 2 | Close app |
 | Ctrl+T | Toggle button / tree view |
+| Ctrl+F | Toggle favorite |
 | F1 | Help |
 
 ## Repository Structure

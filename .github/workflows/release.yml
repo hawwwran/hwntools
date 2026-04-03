@@ -25,6 +25,12 @@ jobs:
             exit 1
           fi
 
+      - name: Stamp version in constants.py
+        run: |
+          VER="${{ github.ref_name }}"
+          VER="${VER#v}"
+          sed -i "s/^VERSION = \".*\"/VERSION = \"${VER}\"/" app/hwnlib/constants.py
+
       - name: Generate VERSION.md
         run: |
           TAG="${{ github.ref_name }}"

@@ -2,7 +2,7 @@ import os
 import subprocess
 
 from .config import parse_config, label_from_filename
-from .constants import PACKAGES_DIR, REPOS_DIR
+from .constants import PACKAGES_DIR, REPOS_DIR, VERSION
 
 
 def _version_tuple(v):
@@ -174,3 +174,30 @@ def _check_repo_updates(url, path=""):
             if _version_newer(rpkg["version"], installed[name]["version"]):
                 updatable.append(name)
     return len(updatable) > 0, updatable, None
+
+
+HWNTOOLS_REPO = "https://github.com/hawwwran/hwntools.git"
+HWNTOOLS_DOWNLOAD = "https://github.com/hawwwran/hwntools/releases/latest/download/hwntools.zip"
+
+
+def _check_app_update():
+    """Check if a newer version of HWN Tools is available.
+    Returns (latest_version, has_update, error)."""
+    ok, out, err = _git_run(
+        ["ls-remote", "--tags", "--sort=-v:refname", HWNTOOLS_REPO],
+        timeout=10
+    )
+    if not ok:
+        return None, False, err
+    latest = None
+    for line in out.splitlines():
+        parts = line.split("refs/tags/")
+        if len(parts) == 2:
+            tag = parts[1]
+            if tag.startswith("v") and not tag.endswith("^{}"):
+                latest = tag
+                break
+    if not latest:
+        return None, False, "no version tags found"
+    remote_ver = latest.lstrip("v")
+    return remote_ver, _version_newer(remote_ver, VERSION), None

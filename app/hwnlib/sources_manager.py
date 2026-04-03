@@ -378,6 +378,7 @@ class SourcesManager(Gtk.Window):
     def _on_package_manager_closed(self, widget):
         self.refresh_servers_list()
         self.parent_win._check_for_updates()
+        self.parent_win.refresh_view()
 
     def _check_repo(self, repo, status_lbl, spinner):
         def worker():

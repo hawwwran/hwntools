@@ -9,6 +9,7 @@ from .constants import PACKAGES_DIR
 from .git_packages import (
     _version_newer, _scan_installed_packages, _ensure_repo, _scan_repo_packages,
 )
+from .state import load_state, save_state
 
 
 class PackageManager(Gtk.Window):
@@ -174,20 +175,34 @@ class PackageManager(Gtk.Window):
         expander = Gtk.Expander(label="Show package details")
         detail_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         detail_box.set_margin_start(16)
+
+        hidden = set(load_state().get("hidden_scripts", []))
+        local_pkg_path = installed.get(name, {}).get("path", "")
+        checkboxes = []
+
         for script in rpkg.get("scripts", []):
             spath = script["path"]
             sver = script.get("version", "?")
             slabel = script.get("label", label_from_filename(os.path.splitext(os.path.basename(spath))[0]))
             sdesc = script.get("description", "")
             starget = script.get("target", "")
-            local_pkg_path = installed.get(name, {}).get("path", "")
             local_sver = "?"
+            script_full_path = ""
             if local_pkg_path:
                 local_script = os.path.join(local_pkg_path, spath)
+                script_full_path = local_script
                 if os.path.isfile(local_script):
                     sc = parse_config(local_script)
                     local_sver = sc.get("version", "?")
             srow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+
+            if script_full_path:
+                cb = Gtk.CheckButton()
+                cb.set_active(script_full_path not in hidden)
+                cb.connect("toggled", self._on_script_toggled, script_full_path)
+                srow.pack_start(cb, False, False, 0)
+                checkboxes.append(cb)
+
             if starget:
                 target_icon = "computer-symbolic"
                 timg = Gtk.Image.new_from_icon_name(target_icon, Gtk.IconSize.MENU)
@@ -208,6 +223,27 @@ class PackageManager(Gtk.Window):
                 slbl.set_tooltip_text(sdesc)
             srow.pack_start(slbl, True, True, 0)
             detail_box.pack_start(srow, False, False, 0)
+
+        if checkboxes:
+            btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            btn_row.set_margin_top(4)
+            sel_all = Gtk.Button(label="Show all")
+            unsel_all = Gtk.Button(label="Hide all")
+
+            def on_select_all(widget, cbs=checkboxes):
+                for cb in cbs:
+                    cb.set_active(True)
+
+            def on_unselect_all(widget, cbs=checkboxes):
+                for cb in cbs:
+                    cb.set_active(False)
+
+            sel_all.connect("clicked", on_select_all)
+            unsel_all.connect("clicked", on_unselect_all)
+            btn_row.pack_start(sel_all, False, False, 0)
+            btn_row.pack_start(unsel_all, False, False, 0)
+            detail_box.pack_start(btn_row, False, False, 0)
+
         expander.add(detail_box)
         vbox.pack_start(expander, False, False, 0)
 
@@ -230,6 +266,21 @@ class PackageManager(Gtk.Window):
         hbox.pack_end(get_btn, False, False, 0)
         row.add(hbox)
         return row
+
+    def _on_script_toggled(self, checkbox, script_path):
+        state = load_state()
+        hidden = state.get("hidden_scripts", [])
+        if checkbox.get_active():
+            hidden = [h for h in hidden if h != script_path]
+        else:
+            if script_path not in hidden:
+                hidden.append(script_path)
+        state["hidden_scripts"] = hidden
+        save_state(state)
+        try:
+            self.parent_win.parent_win.refresh_view()
+        except Exception:
+            pass
 
     def _on_install(self, button, rpkg):
         button.set_sensitive(False)

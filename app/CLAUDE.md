@@ -46,7 +46,7 @@ Optional comment block after the shebang line:
 ```
 
 - `@label` — button text and output window title. Default: filename with dashes/underscores replaced by spaces, title-cased
-- `@description` — short description of what the script does. Informational only, not displayed in the UI currently.
+- `@description` — short description of what the script does. Shown as tooltip in package manager detail view.
 - `@icon` — GTK icon theme name (e.g. `appointment-soon`, `utilities-system-monitor`, `drive-harddisk`). Default: `text-x-script` for scripts, `folder` for directories
 - `@order` — custom sort value. Scripts/folders with `@order` are sorted first (by order value), then the rest alphabetically by label. Works in both scripts and `.config` files
 - `@search` — alternative text used for search matching instead of the label. Useful for scripts with accented or special characters in the label (e.g. `# @search: vypinac` for a script labeled "Vypínač"). Works in both scripts and `.config` files
@@ -102,8 +102,8 @@ Package repositories (git repos) can be configured in the Script Sources Manager
 
 Two views, toggled with Ctrl+T (remembered across launches):
 
-- **Button view** — folders and scripts as clickable buttons, one level at a time. Back/Top navigation bar with current path display.
-- **Tree view** — full folder/script hierarchy as indented clickable rows with tree connector lines (`├──`, `└──`, `│`). Folders are bold non-interactive labels; only scripts are selectable and navigable with arrow keys.
+- **Button view** — folders and scripts as clickable buttons, one level at a time. Back/Top navigation bar with current path display. Scripts and folders have a star button for favoriting.
+- **Tree view** — full folder/script hierarchy as clickable rows with tree connector lines (`├──`, `└──`, `│`). All items are clickable buttons with star buttons for favoriting.
 
 ## Search
 
@@ -113,6 +113,22 @@ Start typing in either view to search. Matches against display labels and file p
 - In **tree view**: the list is filtered to show matching entries.
 
 Esc clears the search. Backspace deletes the last character.
+
+## Favorites
+
+Scripts and folders can be marked as favorites using the star button (visible on each item) or Ctrl+F on the focused item. Favorites appear at the top of the root view, separated by a line. The original item is hidden from its normal position to avoid duplicates. Favorites are stored in `.state.json` under `favorites` as a list of paths. Invalid favorites (deleted files) are pruned automatically.
+
+## Hidden scripts
+
+Individual scripts can be hidden from all views via the package manager's detail view. Each script has a checkbox — unchecked scripts are hidden. "Show all" and "Hide all" buttons are provided. Folders that become empty after hiding all their scripts are also hidden. Stored in `.state.json` under `hidden_scripts`.
+
+## Auto-descend
+
+If the root contains exactly one non-missing folder and no scripts, the app automatically enters that folder. Back/Top buttons are disabled at this effective root, but the path bar shows the folder name.
+
+## Auto-update
+
+On startup, the app checks for both package updates and app updates in a background thread. App version is checked via `git ls-remote --tags` against the HWN Tools repository (no API rate limit). A red dot on the burger menu icon indicates available updates, with red dots on individual menu items showing which type. The "Update HWN Tools" menu item opens an update manager window that shows current vs latest version and allows downloading the update. Development installs (detected by `.git` directory or `CLAUDE.md` presence) have the update button disabled.
 
 ## Keyboard shortcuts
 
@@ -127,6 +143,7 @@ Esc clears the search. Backspace deletes the last character.
 | Esc            | Clear search / close output      |
 | Esc × 2        | Close app (within 250ms)         |
 | Ctrl+T         | Toggle tree / button view        |
+| Ctrl+F         | Toggle favorite on focused item  |
 | F1             | Show keyboard shortcuts help     |
 
 ## App icon
@@ -135,7 +152,8 @@ Both windows use `application-x-shellscript` as the taskbar icon.
 
 ## UI details
 
-- Header bar with burger menu (Manage Script Sources, Help) and window close
+- Header bar with burger menu (Manage Script Sources, Update HWN Tools, Help) and window close
+- Red dot on burger menu icon when updates are available (app or packages); red dots on individual menu items
 - Focused button gets a highlighted border, tinted background, and bold label
 - Folder buttons always have bold labels
 - Tree view uses monospace box-drawing characters for connector lines
