@@ -59,7 +59,6 @@ class HwnTools(Gtk.Window):
         self.updates_available = {}
         self._app_update_available = False
         menu_btn = Gtk.MenuButton()
-        menu_btn.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", ICON_SIZE))
         popover = Gtk.Popover()
         menu_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         menu_box.set_margin_top(4)
@@ -76,11 +75,11 @@ class HwnTools(Gtk.Window):
             hbox.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU), False, False, 0)
             hbox.pack_start(Gtk.Label(label=label, xalign=0), True, True, 0)
             if key:
-                dot = Gtk.DrawingArea()
+                dot = Gtk.EventBox()
                 dot.set_size_request(8, 8)
                 dot.set_valign(Gtk.Align.CENTER)
                 dot.set_no_show_all(True)
-                dot.connect("draw", self._draw_menu_dot)
+                dot.get_style_context().add_class("update-dot")
                 hbox.pack_end(dot, False, False, 4)
                 self._menu_dots[key] = dot
             item.add(hbox)
@@ -92,8 +91,21 @@ class HwnTools(Gtk.Window):
 
         self.menu_btn = menu_btn
         self._show_update_dot = False
-        menu_btn.connect_after("draw", self._draw_update_dot)
-        header_bar.pack_start(menu_btn)
+        menu_btn.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", ICON_SIZE))
+        self._burger_dot = Gtk.Box()
+        self._burger_dot.set_size_request(8, 8)
+        self._burger_dot.set_halign(Gtk.Align.END)
+        self._burger_dot.set_valign(Gtk.Align.START)
+        self._burger_dot.set_vexpand(False)
+        self._burger_dot.set_hexpand(False)
+        self._burger_dot.set_margin_top(7)
+        self._burger_dot.get_style_context().add_class("update-dot")
+        self._burger_dot.set_no_show_all(True)
+        overlay = Gtk.Overlay()
+        overlay.add(menu_btn)
+        overlay.add_overlay(self._burger_dot)
+        overlay.set_overlay_pass_through(self._burger_dot, True)
+        header_bar.pack_start(overlay)
 
         self.set_titlebar(header_bar)
 
@@ -144,22 +156,6 @@ class HwnTools(Gtk.Window):
 
         self._check_for_updates()
 
-    def _draw_update_dot(self, widget, cr):
-        if not self._show_update_dot:
-            return False
-        alloc = widget.get_allocation()
-        cr.set_source_rgb(0.8, 0.1, 0.1)
-        cr.arc(alloc.width - 13, 18, 4, 0, 2 * 3.14159)
-        cr.fill()
-        return False
-
-    @staticmethod
-    def _draw_menu_dot(widget, cr):
-        cr.set_source_rgb(0.8, 0.1, 0.1)
-        cr.arc(4, 4, 4, 0, 2 * 3.14159)
-        cr.fill()
-        return False
-
     def _check_for_updates(self):
         def worker():
             results = {}
@@ -198,11 +194,12 @@ class HwnTools(Gtk.Window):
             parts.append(f"{pkg_total} package update{'s' if pkg_total != 1 else ''}")
         if parts:
             self._show_update_dot = True
+            self._burger_dot.show()
             self.menu_btn.set_tooltip_text(", ".join(parts))
         else:
             self._show_update_dot = False
+            self._burger_dot.hide()
             self.menu_btn.set_tooltip_text(None)
-        self.menu_btn.queue_draw()
         if "packages" in self._menu_dots:
             self._menu_dots["packages"].show() if pkg_total > 0 else self._menu_dots["packages"].hide()
         if "app" in self._menu_dots:

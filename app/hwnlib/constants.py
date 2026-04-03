@@ -2,7 +2,7 @@ import os
 
 from gi.repository import Gtk
 
-VERSION = "0.1.1"
+VERSION = "0.0.0"
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = APP_DIR  # Virtual root sentinel — not scanned for scripts
@@ -46,5 +46,13 @@ button.folder-btn label {
     padding: 0;
     min-height: 0;
     min-width: 0;
+}
+.update-dot {
+    background-color: #cc1a1a;
+    border-radius: 4px;
+    min-width: 8px;
+    min-height: 8px;
+    padding: 0;
+    margin: 0;
 }
 """
