@@ -1,6 +1,6 @@
 #!/bin/bash
 # @package: hawwwran.random
-# @version: 1.0.0
+# @version: 1.0.1
 # @label: Password Generator
 # @description: Generate secure random passwords with configurable length and character sets
 # @icon: dialog-password
