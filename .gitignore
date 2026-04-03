@@ -1,6 +1,6 @@
 # App runtime
 app/.state.json
-app/__pycache__/
+__pycache__/
 app/packages/
 app/.packages/
 app/scripts/

@@ -77,8 +77,10 @@ Folders support a `.config` file with the same format for `@label`, `@icon`, `@o
 
 ```
 hwntools/
-├── app/          ← the launcher application
-└── packages/     ← published script packages
+├── app/                ← the launcher application
+│   ├── hwntools.py      ← entry point
+│   └── hwnlib/          ← application modules
+└── packages/           ← published script packages
 ```
 
 ## License
