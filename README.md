@@ -15,17 +15,19 @@ GTK script launcher with built-in terminal. Organize and run shell and Python sc
 
 ## Installation
 
+Download the [latest release](https://github.com/hawwwran/hwntools/releases/latest/download/hwntools.zip), unzip it into your desired folder, and run.
+
 ### Linux
 
 ```bash
-python3 app/hwntools.py
+python3 hwntools.py
 ```
 
 Dependencies (`python3`, `gir1.2-gtk-3.0`, `gir1.2-vte-2.91`) are auto-detected — if missing, the app prompts to install them.
 
 ### Windows (WSLg)
 
-Run `app/windows-setup.bat` to set up WSL dependencies and create a keyboard shortcut. Then launch via `hwntools.cmd` or `Ctrl+Shift+~`.
+Run `windows-setup.bat` to set up WSL dependencies and create a keyboard shortcut. Then launch via `hwntools.cmd` or `Ctrl+Shift+~`.
 
 ## Adding Scripts
 
