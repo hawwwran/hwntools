@@ -13,15 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Verify tag is on main
         run: |
-          git branch --contains "${{ github.ref_name }}" | grep -q 'main' || {
-            echo "Tag ${{ github.ref_name }} is not on main branch, skipping release."
+          TAG_COMMIT=$(git rev-parse HEAD)
+          MAIN_COMMIT=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
+            echo "Tag points to $TAG_COMMIT but main is at $MAIN_COMMIT — skipping."
             exit 1
-          }
+          fi
 
       - name: Create hwntools.zip from app/
         run: cd app && zip -r ../hwntools.zip . -x '__pycache__/*' '*.pyc' '.state.json' 'packages/*' '.packages/*' 'hwntools.vbs'
