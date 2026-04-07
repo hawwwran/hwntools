@@ -28,8 +28,10 @@ def parse_config(path):
                     break
                 if "# @" in line or line.startswith("# @"):
                     part = line.lstrip("# ").strip()
-                    if part.startswith("@dep "):
-                        deps.append(part[5:].strip())
+                    if part.startswith("@dep:") or part.startswith("@dep "):
+                        dep_val = part[4:].lstrip(": ").strip()
+                        if dep_val:
+                            deps.append(dep_val)
                     elif part.startswith("@") and ":" in part:
                         key, _, value = part[1:].partition(":")
                         config[key.strip()] = value.strip()

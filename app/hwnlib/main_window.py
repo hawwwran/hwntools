@@ -37,6 +37,10 @@ class HwnTools(Gtk.Window):
         self.tree_mode = state.get("tree_mode", False)
         self.last_esc_time = 0
         self.ready = False
+        self._search_cache = None
+        self._search_cache_tree = None
+        self._search_cache_ready = False
+        self._search_pending = False
 
         def on_shown(widget):
             self.ready = True
@@ -154,6 +158,7 @@ class HwnTools(Gtk.Window):
         else:
             self.populate(ROOT_DIR)
 
+        self._start_search_scan()
         self._check_for_updates()
 
     def _check_for_updates(self):
@@ -204,6 +209,47 @@ class HwnTools(Gtk.Window):
             self._menu_dots["packages"].show() if pkg_total > 0 else self._menu_dots["packages"].hide()
         if "app" in self._menu_dots:
             self._menu_dots["app"].show() if self._app_update_available else self._menu_dots["app"].hide()
+
+    def _start_search_scan(self):
+        self._search_cache_ready = False
+        def worker():
+            flat = self.collect_all_entries()
+            tree = self.collect_tree_entries()
+            GLib.idle_add(self._on_search_scan_done, flat, tree)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_search_scan_done(self, flat, tree):
+        self._search_cache = flat
+        self._search_cache_tree = tree
+        self._search_cache_ready = True
+        if self._search_pending:
+            self._search_pending = False
+            if self.search_mode and self.search_query:
+                if self.tree_mode:
+                    self.populate_tree()
+                else:
+                    self.populate_search()
+
+    def invalidate_search_cache(self):
+        self._search_cache = None
+        self._search_cache_tree = None
+        self._search_cache_ready = False
+        self._start_search_scan()
+
+    def _show_search_loading(self):
+        child = self.scrolled.get_child()
+        if child:
+            self.scrolled.remove(child)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_valign(Gtk.Align.CENTER)
+        box.set_halign(Gtk.Align.CENTER)
+        spinner = Gtk.Spinner()
+        spinner.start()
+        box.pack_start(spinner, False, False, 0)
+        box.pack_start(Gtk.Label(label="Scanning scripts…"), False, False, 0)
+        self.scrolled.add(box)
+        self.show_all()
+        self.update_nav_bar()
 
     def update_nav_bar(self):
         if self.tree_mode or self.search_mode:
@@ -578,6 +624,11 @@ class HwnTools(Gtk.Window):
         return results
 
     def populate_search(self):
+        if not self._search_cache_ready:
+            self._search_pending = True
+            self._show_search_loading()
+            return
+
         self.buttons = []
         self.focused_index = 0
         child = self.scrolled.get_child()
@@ -589,7 +640,7 @@ class HwnTools(Gtk.Window):
         box.set_margin_start(10)
         box.set_margin_end(10)
 
-        all_entries = self.collect_all_entries()
+        all_entries = self._search_cache
         matches = []
         for label, icon, path, rel_dir, rel_path, is_folder, missing, search in all_entries:
             match_text = search if search else label
@@ -741,6 +792,11 @@ class HwnTools(Gtk.Window):
         return ebox
 
     def populate_tree(self):
+        if self.search_query and not self._search_cache_ready:
+            self._search_pending = True
+            self._show_search_loading()
+            return
+
         self.buttons = []
         self.focused_index = 0
         child = self.scrolled.get_child()
@@ -752,7 +808,7 @@ class HwnTools(Gtk.Window):
         box.set_margin_start(16)
         box.set_margin_end(16)
 
-        all_entries = self.collect_tree_entries()
+        all_entries = self._search_cache_tree if self.search_query and self._search_cache_ready else self.collect_tree_entries()
         if self.search_query:
             all_entries = [
                 e for e in all_entries
@@ -887,6 +943,7 @@ class HwnTools(Gtk.Window):
             self.on_help()
             return True
         if key == Gdk.KEY_F5:
+            self.invalidate_search_cache()
             if self.search_mode:
                 self.exit_search()
             self.populate(self.current_path)
@@ -945,6 +1002,7 @@ class HwnTools(Gtk.Window):
         UpdateManager(self)
 
     def refresh_view(self):
+        self.invalidate_search_cache()
         if self.search_mode:
             if self.tree_mode:
                 self.populate_tree()

@@ -74,6 +74,23 @@ if defined NEEDS_WSL2 (
     goto :done
 )
 
+:: Check that WSL distro is accessible and has a user
+echo.
+echo [*] Checking WSL distro is accessible...
+set "WSL_USER="
+for /f "delims=" %%u in ('wsl -- whoami 2^>nul') do set "WSL_USER=%%u"
+if not defined WSL_USER (
+    echo [!] WSL distro is installed but not accessible.
+    echo     The distro may still be installing or needs initial setup.
+    echo     Open a WSL terminal manually first:
+    echo.
+    echo       wsl
+    echo.
+    echo     Complete the initial setup, then run this script again.
+    goto :done
+)
+echo [OK] WSL is accessible ^(user: %WSL_USER%^)
+
 :: Check WSLg by testing DISPLAY inside WSL
 echo.
 echo [*] Checking WSLg support...
@@ -169,6 +186,26 @@ if /i "%RESTART_EXPLORER%"=="y" (
     taskkill /f /im explorer.exe >nul 2>&1
     start explorer.exe
     echo [OK] Explorer restarted
+)
+
+echo.
+echo   HWN Tools may need to install additional dependencies
+echo   inside WSL on first run ^(GTK, VTE^). Running it now lets
+echo   you handle that interactively.
+echo.
+set /p TEST_RUN="Launch HWN Tools now to verify? (y/n): "
+if /i "%TEST_RUN%"=="y" (
+    echo.
+    echo [*] Launching HWN Tools in WSL...
+    echo     If dependencies are missing, you will be prompted to install them.
+    echo.
+    wsl -- bash -c "cd '%WSLPATH%' && python3 hwntools.py"
+    if errorlevel 1 (
+        echo.
+        echo [!] Something went wrong. Check the errors above.
+    ) else (
+        echo [OK] HWN Tools is ready. You can launch it with Ctrl+Shift+~ or hwntools.cmd
+    )
 )
 
 :done

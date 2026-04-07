@@ -37,8 +37,14 @@ if _MISSING_DEPS:
             print(f"  Running: {' '.join(cmd)}\n")
             result = subprocess.run(cmd)
             if result.returncode == 0:
-                print("\n  Dependencies installed. Restarting HWN Tools...\n")
-                os.execv(sys.executable, [sys.executable] + sys.argv)
+                print("\n  Dependencies installed. Launching HWN Tools...\n")
+                subprocess.Popen(
+                    [sys.executable] + sys.argv,
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                raise SystemExit(0)
             else:
                 print("\n  Installation failed. Please install manually:")
                 print(f"    sudo apt install {pkgs}\n")
