@@ -5,9 +5,6 @@ __pycache__/
 app/packages/
 app/.packages/
 
-# Images
-example.png
-
 # Generated
 app/hwntools.vbs
 app/VERSION.md
