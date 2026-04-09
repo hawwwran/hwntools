@@ -2,6 +2,8 @@
 
 GTK script launcher with built-in terminal. Organize and run shell and Python scripts from a clean button interface.
 
+![HWN Tools](example.png)
+
 ## Features
 
 - Scripts become clickable buttons with icons and labels
