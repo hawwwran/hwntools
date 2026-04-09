@@ -1,8 +1,12 @@
 # App runtime
 app/.state.json
+.state.json
 __pycache__/
 app/packages/
 app/.packages/
+
+# Images
+example.png
 
 # Generated
 app/hwntools.vbs
