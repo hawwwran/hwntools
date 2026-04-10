@@ -7,6 +7,124 @@ from .deps import check_dependencies
 from .state import load_state, save_state
 
 
+def _make_git_terminal(parent, title, command, on_success=None, on_failure=None,
+                       cleanup_dir=None):
+    """Open a terminal window that runs a git command interactively.
+    on_success: called and window auto-closes on exit code 0.
+    on_failure: called on non-zero exit or dismiss; window stays open for retry.
+    cleanup_dir: directory to remove before retry (partial clone leftovers)."""
+    win = Gtk.Window(title=title)
+    win.set_transient_for(parent)
+    win.set_modal(True)
+    win.set_icon_name("application-x-shellscript")
+    win.set_default_size(600, 350)
+    failed = [False]  # track whether on_failure was already called
+
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    win.add(vbox)
+
+    terminal = Vte.Terminal()
+    terminal.set_font(Pango.FontDescription("monospace 11"))
+    terminal.set_color_background(Gdk.RGBA(0.118, 0.118, 0.118, 1))
+    terminal.set_color_foreground(Gdk.RGBA(0.831, 0.831, 0.831, 1))
+    terminal.set_scroll_on_output(True)
+    terminal.set_scrollback_lines(10000)
+
+    status = Gtk.Label(label="Waiting for authentication\u2026")
+    status.set_xalign(0)
+    status.get_style_context().add_class("dim-label")
+    status.set_margin_start(8)
+    status.set_margin_bottom(4)
+
+    btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    btn_box.set_margin_start(8)
+    btn_box.set_margin_end(8)
+    btn_box.set_margin_bottom(6)
+    retry_btn = Gtk.Button(label="Retry")
+    close_btn = Gtk.Button(label="Close")
+    btn_box.pack_end(close_btn, False, False, 0)
+    btn_box.pack_end(retry_btn, False, False, 0)
+    retry_btn.set_no_show_all(True)
+    close_btn.set_no_show_all(True)
+
+    def _cleanup():
+        if cleanup_dir and os.path.isdir(cleanup_dir):
+            import shutil
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+    def spawn():
+        failed[0] = False
+        retry_btn.hide()
+        close_btn.hide()
+        status.set_text("Waiting for authentication\u2026")
+        terminal.spawn_async(
+            Vte.PtyFlags.DEFAULT,
+            os.environ.get("HOME", "/"),
+            ["/bin/bash", "-c", command + "; exit $?"],
+            None,
+            GLib.SpawnFlags.DEFAULT,
+            None, None,
+            -1, None,
+            None,
+        )
+
+    def _fire_failure():
+        if not failed[0] and on_failure:
+            failed[0] = True
+            on_failure()
+
+    def on_key(widget, event):
+        if event.state & Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_v, Gdk.KEY_V):
+            terminal.paste_clipboard()
+            return True
+        if event.keyval == Gdk.KEY_Escape:
+            _fire_failure()
+            win.destroy()
+            return True
+        return False
+
+    def on_child_exited(terminal, exit_status):
+        code = exit_status >> 8
+        if code == 0:
+            if on_success:
+                on_success()
+            win.destroy()
+        else:
+            status.set_markup(
+                '<span color="#cc3333">Authentication failed</span>')
+            retry_btn.show()
+            close_btn.show()
+            _fire_failure()
+
+    def on_retry(button):
+        _cleanup()
+        terminal.reset(True, True)
+        spawn()
+
+    def on_close(button):
+        _fire_failure()
+        win.destroy()
+
+    terminal.connect("key-press-event", on_key)
+    terminal.connect("child-exited", on_child_exited)
+    retry_btn.connect("clicked", on_retry)
+    close_btn.connect("clicked", on_close)
+
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_margin_top(6)
+    scrolled.set_margin_bottom(6)
+    scrolled.set_margin_start(6)
+    scrolled.set_margin_end(6)
+    scrolled.add(terminal)
+    vbox.pack_start(scrolled, True, True, 0)
+    vbox.pack_start(status, False, False, 0)
+    vbox.pack_start(btn_box, False, False, 0)
+
+    win.show_all()
+    spawn()
+    return win
+
+
 class InstallDialog(Gtk.Window):
     """Terminal window for installing a dependency."""
     def __init__(self, parent, dep_name):
