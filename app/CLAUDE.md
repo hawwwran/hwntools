@@ -16,14 +16,14 @@ app/
 │   ├── state.py              ← load_state, save_state
 │   ├── config.py             ← parse_config, label_from_filename, subsequence_match
 │   ├── deps.py               ← dependency checking
-│   ├── git_packages.py       ← git helpers, repo scanning, version comparison
-│   ├── dialogs.py            ← InstallDialog, DepDialog, OutputDialog
+│   ├── git_packages.py       ← git helpers, repo scanning, version comparison, auth detection
+│   ├── dialogs.py            ← InstallDialog, DepDialog, OutputDialog, git auth terminal
 │   ├── sources_manager.py    ← SourcesManager window
 │   ├── package_manager.py    ← PackageManager window
 │   ├── main_window.py        ← HwnTools main window
 │   └── wslg_anchor.py        ← WSLg session anchor (hidden GTK window watchdog)
 ├── packages/                ← installed packages (gitignore)
-├── .packages/               ← git repo clones (gitignore)
+├── .packages/               ← git repo clones, flat naming (gitignore)
 └── .state.json              ← auto-saved window size/position + config (gitignore)
 ```
 
@@ -74,9 +74,9 @@ Same format as script config, but no shebang. Both fields optional.
 
 ## Script Sources
 
-Additional script folders from anywhere on the filesystem can be mounted as virtual children of the root. Managed via the burger menu > "Manage Script Sources".
+Additional script folders from anywhere on the filesystem can be mounted as virtual children of the root. Managed via the burger menu > "Manage Script Sources". In the dialog, this section appears below Package repositories in a collapsible expander (collapsed by default when empty, expanded when sources exist). The expander label shows the count of configured sources in parentheses.
 
-- **Add Folder** — opens a native folder picker to select an external directory
+- **Add Folder** — opens a native folder picker to select an external directory (auto-expands the section)
 - **Label** — optional custom display name; if empty, falls back to the folder's `.config` label, then the folder name
 - **Remove** — removes the folder from the config only (never deletes the actual folder or its scripts)
 
@@ -86,16 +86,20 @@ Sources pointing to non-existent paths or paths that would cause recursion are s
 
 ## Package Manager
 
-Package repositories (git repos) can be configured in the Script Sources Manager under "Package repositories". Each entry has a git clone URL and an optional subfolder path.
+Package repositories (git repos) can be configured in the Script Sources Manager under "Package repositories" (shown first, above local script sources). Each entry has a git clone URL and an optional subfolder path.
 
 - **Add Repository** — enter a git URL (e.g. `https://github.com/user/repo.git`) and optional path (e.g. `packages`)
+- **Init Repository** — before cloning, a pre-flight `git ls-remote` check verifies the repo is reachable. If authentication fails, an interactive VTE terminal opens where the user can enter credentials (supports Ctrl+V paste for tokens). On success the terminal auto-closes and initialization continues; on failure a Retry/Close prompt is shown.
 - **Manage Packages** — clones/pulls the repo (sparse checkout if path is set), then shows installed and available packages
 - **Installed packages** show local vs remote version comparison; "Update Package" button when a newer version is available; expandable script-level detail view
 - **Available packages** show remote version with a "Get" button to install
 - Packages are copied from the cloned repo to `packages/`, validated (`@package` and `@version` must be present and matching in `.config` and all scripts)
-- Git clones are stored in `.packages/OWNER/REPO/` (auto-derived from the git URL)
-- On app startup, a background check pulls all configured repos and compares versions (silent on failure), shows a red dot on the burger menu if updates are available
+- Git clones are stored in `.packages/` as flat directories named `domain-first-last-XXXXX` (domain label, first and last URL path segments, optional subfolder segment, and a 5-char MD5 suffix for uniqueness). Example: `github-hawwwran-hwntools-packages-d4e5f`
+- Broken clones (`.git` exists but HEAD is invalid) are automatically deleted and re-cloned
+- `GIT_TERMINAL_PROMPT=0` is set on all non-interactive git operations to prevent hanging on credential prompts; git errors are translated to user-friendly messages
+- On app startup, a background check runs `git ls-remote` then pulls all configured repos and compares versions (silently skips unreachable repos), shows a red dot on the burger menu if updates are available
 - All git operations run in background threads — UI never freezes
+- The section label shows a count of configured repos in parentheses
 - Stored in `.state.json` under `package_repos` as `[{url, path}]`
 
 ## Views
