@@ -7,6 +7,39 @@ from .deps import check_dependencies
 from .state import load_state, save_state
 
 
+def _status_hint_row(status=None):
+    """HBox: optional status label on the left, copy/paste hint on the right.
+    Overrides the status label's start/bottom margins so the row aligns as one line."""
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    box.set_margin_start(8)
+    box.set_margin_end(8)
+    box.set_margin_bottom(4)
+    if status is not None:
+        status.set_margin_start(0)
+        status.set_margin_bottom(0)
+        box.pack_start(status, False, False, 0)
+    hint = Gtk.Label(label="Select text \u2022 Ctrl+Shift+C copy \u2022 Ctrl+Shift+V paste")
+    hint.get_style_context().add_class("dim-label")
+    box.pack_end(hint, False, False, 0)
+    return box
+
+
+def _handle_terminal_copy_paste(terminal, event, allow_plain_paste=False):
+    """Ctrl+Shift+C copies, Ctrl+Shift+V pastes. Returns True if the event was handled.
+    allow_plain_paste: also accept Ctrl+V without Shift (used for the git auth terminal
+    so users can paste access tokens quickly)."""
+    if not (event.state & Gdk.ModifierType.CONTROL_MASK):
+        return False
+    shift = event.state & Gdk.ModifierType.SHIFT_MASK
+    if shift and event.keyval in (Gdk.KEY_C, Gdk.KEY_c):
+        terminal.copy_clipboard_format(Vte.Format.TEXT)
+        return True
+    if (shift or allow_plain_paste) and event.keyval in (Gdk.KEY_V, Gdk.KEY_v):
+        terminal.paste_clipboard()
+        return True
+    return False
+
+
 def _make_git_terminal(parent, title, command, on_success=None, on_failure=None,
                        cleanup_dir=None):
     """Open a terminal window that runs a git command interactively.
@@ -74,8 +107,7 @@ def _make_git_terminal(parent, title, command, on_success=None, on_failure=None,
             on_failure()
 
     def on_key(widget, event):
-        if event.state & Gdk.ModifierType.CONTROL_MASK and event.keyval in (Gdk.KEY_v, Gdk.KEY_V):
-            terminal.paste_clipboard()
+        if _handle_terminal_copy_paste(terminal, event, allow_plain_paste=True):
             return True
         if event.keyval == Gdk.KEY_Escape:
             _fire_failure()
@@ -117,7 +149,7 @@ def _make_git_terminal(parent, title, command, on_success=None, on_failure=None,
     scrolled.set_margin_end(6)
     scrolled.add(terminal)
     vbox.pack_start(scrolled, True, True, 0)
-    vbox.pack_start(status, False, False, 0)
+    vbox.pack_start(_status_hint_row(status), False, False, 0)
     vbox.pack_start(btn_box, False, False, 0)
 
     win.show_all()
@@ -153,6 +185,7 @@ class InstallDialog(Gtk.Window):
         scrolled.set_margin_end(6)
         scrolled.add(self.terminal)
         vbox.pack_start(scrolled, True, True, 0)
+        vbox.pack_start(_status_hint_row(), False, False, 0)
 
         self.show_all()
 
@@ -168,6 +201,8 @@ class InstallDialog(Gtk.Window):
         )
 
     def on_key(self, widget, event):
+        if _handle_terminal_copy_paste(self.terminal, event):
+            return True
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
             return True
@@ -287,9 +322,7 @@ class OutputDialog(Gtk.Window):
         self.status = Gtk.Label(label="Running...")
         self.status.set_xalign(0)
         self.status.get_style_context().add_class("terminal-header")
-        self.status.set_margin_start(8)
-        self.status.set_margin_bottom(4)
-        vbox.pack_start(self.status, False, False, 0)
+        vbox.pack_start(_status_hint_row(self.status), False, False, 0)
 
         self.show_all()
 
@@ -321,6 +354,8 @@ class OutputDialog(Gtk.Window):
         save_state(state)
 
     def on_key(self, widget, event):
+        if _handle_terminal_copy_paste(self.terminal, event):
+            return True
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
             return True

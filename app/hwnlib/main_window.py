@@ -1025,6 +1025,8 @@ class HwnTools(Gtk.Window):
             ("Esc \u00d7 2", "Close app (within 250ms)"),
             ("Ctrl+T", "Toggle tree / button view"),
             ("Ctrl+F", "Toggle favorite"),
+            ("Ctrl+Shift+C", "Copy selection in terminal windows"),
+            ("Ctrl+Shift+V", "Paste in terminal windows"),
             ("F1", "Show this help"),
         ]
         dialog = Gtk.Dialog(title="Keyboard Shortcuts", transient_for=self, modal=True)
