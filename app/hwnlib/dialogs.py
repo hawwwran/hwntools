@@ -7,6 +7,29 @@ from .deps import check_dependencies
 from .state import load_state, save_state
 
 
+# Script output windows are independent of the main window: they do not block
+# it and keep the GTK main loop alive after it closes, so a running script is
+# not killed when the user closes hwntools.
+_active_output_windows = set()
+_main_window_alive = [True]
+
+
+def _on_main_window_closed():
+    _main_window_alive[0] = False
+    if not _active_output_windows:
+        Gtk.main_quit()
+
+
+def _register_output_window(win):
+    _active_output_windows.add(win)
+
+
+def _unregister_output_window(win):
+    _active_output_windows.discard(win)
+    if not _main_window_alive[0] and not _active_output_windows:
+        Gtk.main_quit()
+
+
 def _status_hint_row(status=None):
     """HBox: optional status label on the left, copy/paste hint on the right.
     Overrides the status label's start/bottom margins so the row aligns as one line."""
@@ -278,10 +301,10 @@ class DepDialog(Gtk.Window):
 class OutputDialog(Gtk.Window):
     def __init__(self, parent, title, script_path):
         super().__init__(title=title)
-        self.set_transient_for(parent)
-        self.set_modal(True)
         self.set_icon_name("application-x-shellscript")
         self.parent_win = parent
+        _register_output_window(self)
+        self.connect("destroy", lambda _w: _unregister_output_window(self))
 
         state = load_state()
         w = min(state.get("output_width", 550), 1024)

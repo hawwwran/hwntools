@@ -32,7 +32,7 @@ app/
 - Script sources are managed via the burger menu (see Script Sources below) — the app starts empty and all scripts come from added folders or installed packages
 - Auto-adds executable permission to `.sh`/`.py` files if missing
 - Each script becomes a button (icon + label); each directory becomes a folder button
-- Clicking a script opens a VTE terminal window that runs it — supports interactive input, ANSI colors, full terminal features
+- Clicking a script opens a VTE terminal window that runs it — supports interactive input, ANSI colors, full terminal features. Script output windows are **non-modal** (main window stays interactive) and **survive closing the main window** — the GTK main loop stays alive until every output window is closed, so running scripts are not killed when the user closes hwntools.
 - Folders first, then scripts, both sorted alphabetically
 
 ## Script config

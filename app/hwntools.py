@@ -56,9 +56,10 @@ if _MISSING_DEPS:
     _check_deps_and_exit()
 
 from hwnlib.main_window import HwnTools
+from hwnlib.dialogs import _on_main_window_closed
 
 win = HwnTools()
-win.connect("destroy", Gtk.main_quit)
+win.connect("destroy", lambda _w: _on_main_window_closed())
 win.show_all()
 win.update_nav_bar()
 Gtk.main()
