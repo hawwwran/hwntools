@@ -15,6 +15,16 @@ def _is_auth_error(friendly_msg):
             or friendly_msg.startswith("Permission denied"))
 
 
+def _ensure_credential_helper():
+    """If no global credential.helper is configured, set it to 'store' so that
+    credentials entered in the interactive auth terminal persist for later
+    background operations (which run with GIT_TERMINAL_PROMPT=0)."""
+    ok, out, _ = _git_run(["config", "--global", "credential.helper"], timeout=5)
+    if ok and out:
+        return
+    _git_run(["config", "--global", "credential.helper", "store"], timeout=5)
+
+
 def _friendly_git_error(stderr):
     """Translate raw git stderr into a short user-facing message."""
     low = stderr.lower()

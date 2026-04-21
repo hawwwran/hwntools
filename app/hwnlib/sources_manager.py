@@ -10,6 +10,7 @@ from .state import load_state, save_state
 from .git_packages import (
     _repo_dir_from_url, _ensure_repo, _scan_repo_packages,
     _scan_installed_packages, _check_repo_updates, _is_auth_error,
+    _ensure_credential_helper,
 )
 from .package_manager import PackageManager
 
@@ -354,6 +355,8 @@ class SourcesManager(Gtk.Window):
         """Open a VTE terminal running git clone so the user can authenticate interactively."""
         import shlex
         from .dialogs import _make_git_terminal
+        # Ensure credentials entered here persist for later background git ops.
+        _ensure_credential_helper()
         path = repo.get("path", "")
         repo_dir = _repo_dir_from_url(url, path)
         q_url, q_dir = shlex.quote(url), shlex.quote(repo_dir)
