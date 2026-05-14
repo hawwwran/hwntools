@@ -313,6 +313,8 @@ class OutputDialog(Gtk.Window):
         if "output_x" in state and "output_y" in state:
             self.move(state["output_x"], state["output_y"])
 
+        self._save_pending_id = None
+        self._pending_geo = None
         self.connect("configure-event", self.on_configure)
 
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -369,11 +371,22 @@ class OutputDialog(Gtk.Window):
 
     def on_configure(self, widget, event):
         w, h = self.get_size()
+        self._pending_geo = (w, h, event.x, event.y)
+        if self._save_pending_id is None:
+            self._save_pending_id = GLib.timeout_add(150, self._flush_geo_save)
+
+    def _flush_geo_save(self):
+        self._save_pending_id = None
+        if self._pending_geo is None:
+            return False
+        w, h, x, y = self._pending_geo
+        self._pending_geo = None
         with update_state() as state:
             state["output_width"] = w
             state["output_height"] = h
-            state["output_x"] = event.x
-            state["output_y"] = event.y
+            state["output_x"] = x
+            state["output_y"] = y
+        return False
 
     def on_key(self, widget, event):
         if _handle_terminal_copy_paste(self.terminal, event):

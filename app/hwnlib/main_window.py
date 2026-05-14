@@ -41,6 +41,8 @@ class HwnTools(Gtk.Window):
         self._search_cache_tree = None
         self._search_cache_ready = False
         self._search_pending = False
+        self._save_pending_id = None
+        self._pending_geo = None
 
         def on_shown(widget):
             self.ready = True
@@ -859,11 +861,22 @@ class HwnTools(Gtk.Window):
         if not self.ready:
             return
         w, h = self.get_size()
+        self._pending_geo = (w, h, event.x, event.y)
+        if self._save_pending_id is None:
+            self._save_pending_id = GLib.timeout_add(150, self._flush_geo_save)
+
+    def _flush_geo_save(self):
+        self._save_pending_id = None
+        if self._pending_geo is None:
+            return False
+        w, h, x, y = self._pending_geo
+        self._pending_geo = None
         with update_state() as state:
             state["main_width"] = w
             state["main_height"] = h
-            state["main_x"] = event.x
-            state["main_y"] = event.y
+            state["main_x"] = x
+            state["main_y"] = y
+        return False
 
     def on_search_folder_click(self, button, path):
         self.search_mode = False
