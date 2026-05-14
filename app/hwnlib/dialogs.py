@@ -4,7 +4,7 @@ from gi.repository import Gtk, Gdk, Pango, GLib, Vte
 
 from .config import parse_config
 from .deps import check_dependencies
-from .state import load_state, save_state
+from .state import load_state, update_state
 
 
 # Script output windows are independent of the main window: they do not block
@@ -368,13 +368,12 @@ class OutputDialog(Gtk.Window):
             self.status.set_text(f"Exited with code {code}. Press Esc to close.")
 
     def on_configure(self, widget, event):
-        state = load_state()
         w, h = self.get_size()
-        state["output_width"] = w
-        state["output_height"] = h
-        state["output_x"] = event.x
-        state["output_y"] = event.y
-        save_state(state)
+        with update_state() as state:
+            state["output_width"] = w
+            state["output_height"] = h
+            state["output_x"] = event.x
+            state["output_y"] = event.y
 
     def on_key(self, widget, event):
         if _handle_terminal_copy_paste(self.terminal, event):

@@ -6,7 +6,7 @@ from gi.repository import Gtk, Gdk, Pango, GLib
 
 from .config import parse_config, label_from_filename
 from .constants import PACKAGES_DIR
-from .state import load_state, save_state
+from .state import load_state, update_state
 from .git_packages import (
     _repo_dir_from_url, _ensure_repo, _scan_repo_packages,
     _scan_installed_packages, _check_repo_updates, _is_auth_error,
@@ -168,15 +168,15 @@ class SourcesManager(Gtk.Window):
         self.list_box.show_all()
 
     def on_label_changed(self, entry, index):
-        state = load_state()
-        sources = state.get("script_sources", [])
-        if index < len(sources):
+        with update_state() as state:
+            sources = state.get("script_sources", [])
+            if index >= len(sources):
+                return
             src = self._normalize_source(sources[index])
             src["label"] = entry.get_text().strip()
             sources[index] = src
             state["script_sources"] = sources
-            save_state(state)
-            self.parent_win.refresh_view()
+        self.parent_win.refresh_view()
 
     def on_add(self, button):
         dialog = Gtk.FileChooserDialog(
@@ -191,25 +191,29 @@ class SourcesManager(Gtk.Window):
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
             folder = dialog.get_filename()
-            state = load_state()
-            sources = state.get("script_sources", [])
-            paths = [self._normalize_source(s)["path"] for s in sources]
-            if folder not in paths:
-                sources.append({"path": folder, "label": ""})
-                state["script_sources"] = sources
-                save_state(state)
+            added = False
+            with update_state() as state:
+                sources = state.get("script_sources", [])
+                paths = [self._normalize_source(s)["path"] for s in sources]
+                if folder not in paths:
+                    sources.append({"path": folder, "label": ""})
+                    state["script_sources"] = sources
+                    added = True
+            if added:
                 self.folders_expander.set_expanded(True)
                 self.refresh_list()
                 self.parent_win.refresh_view()
         dialog.destroy()
 
     def on_remove(self, button, index):
-        state = load_state()
-        sources = state.get("script_sources", [])
-        if index < len(sources):
-            del sources[index]
-            state["script_sources"] = sources
-            save_state(state)
+        removed = False
+        with update_state() as state:
+            sources = state.get("script_sources", [])
+            if index < len(sources):
+                del sources[index]
+                state["script_sources"] = sources
+                removed = True
+        if removed:
             self.refresh_list()
             self.parent_win.refresh_view()
 
@@ -306,11 +310,10 @@ class SourcesManager(Gtk.Window):
                     init_btn.show()
 
     def on_add_server(self, button):
-        state = load_state()
-        repos = state.get("package_repos", [])
-        repos.append({"url": "", "path": ""})
-        state["package_repos"] = repos
-        save_state(state)
+        with update_state() as state:
+            repos = state.get("package_repos", [])
+            repos.append({"url": "", "path": ""})
+            state["package_repos"] = repos
         self.refresh_servers_list()
 
     def _on_init_repo(self, button, index, init_btn, spinner, status_lbl, manage_btn):
@@ -381,44 +384,43 @@ class SourcesManager(Gtk.Window):
                            cleanup_dir=repo_dir)
 
     def on_remove_server(self, button, index):
-        state = load_state()
-        repos = state.get("package_repos", [])
-        if index < len(repos):
-            repo = repos[index]
-            url = repo.get("url", "")
-            path = repo.get("path", "")
-
-            if url:
-                repo_dir = _repo_dir_from_url(url, path)
-                cloned_pkg_base = os.path.join(repo_dir, path) if path else repo_dir
-                if os.path.isdir(cloned_pkg_base):
-                    for rpkg in _scan_repo_packages(cloned_pkg_base):
-                        dest = os.path.join(PACKAGES_DIR, rpkg["folder"])
-                        if os.path.isdir(dest):
-                            shutil.rmtree(dest, ignore_errors=True)
-
-                if os.path.isdir(repo_dir):
-                    shutil.rmtree(repo_dir, ignore_errors=True)
-
-            del repos[index]
-            state["package_repos"] = repos
-            save_state(state)
-            self.refresh_servers_list()
-            self.parent_win.refresh_view()
+        removed = None
+        with update_state() as state:
+            repos = state.get("package_repos", [])
+            if index < len(repos):
+                removed = repos[index]
+                del repos[index]
+                state["package_repos"] = repos
+        if removed is None:
+            return
+        url = removed.get("url", "")
+        path = removed.get("path", "")
+        if url:
+            repo_dir = _repo_dir_from_url(url, path)
+            cloned_pkg_base = os.path.join(repo_dir, path) if path else repo_dir
+            if os.path.isdir(cloned_pkg_base):
+                for rpkg in _scan_repo_packages(cloned_pkg_base):
+                    dest = os.path.join(PACKAGES_DIR, rpkg["folder"])
+                    if os.path.isdir(dest):
+                        shutil.rmtree(dest, ignore_errors=True)
+            if os.path.isdir(repo_dir):
+                shutil.rmtree(repo_dir, ignore_errors=True)
+        self.refresh_servers_list()
+        self.parent_win.refresh_view()
 
     def on_repo_field_changed(self, entry, index, field, init_btn=None, manage_btn=None):
-        state = load_state()
-        repos = state.get("package_repos", [])
-        if index < len(repos):
+        with update_state() as state:
+            repos = state.get("package_repos", [])
+            if index >= len(repos):
+                return
             repos[index][field] = entry.get_text().strip()
             state["package_repos"] = repos
-            save_state(state)
-            if field == "url" and init_btn and manage_btn:
-                url = entry.get_text().strip()
-                if url and not manage_btn.get_visible():
-                    init_btn.show()
-                elif not url:
-                    init_btn.hide()
+        if field == "url" and init_btn and manage_btn:
+            url = entry.get_text().strip()
+            if url and not manage_btn.get_visible():
+                init_btn.show()
+            elif not url:
+                init_btn.hide()
 
     def on_manage_packages(self, button, index):
         state = load_state()

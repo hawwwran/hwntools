@@ -13,7 +13,7 @@ from .deps import check_dependencies
 from .dialogs import OutputDialog, DepDialog
 from .git_packages import _check_repo_updates, _check_app_update
 from .sources_manager import SourcesManager
-from .state import load_state, save_state
+from .state import load_state, update_state
 from .update_manager import UpdateManager
 
 
@@ -397,17 +397,16 @@ class HwnTools(Gtk.Window):
         return os.path.realpath(script_path) in [os.path.realpath(f) for f in favorites]
 
     def _toggle_favorite(self, script_path):
-        state = load_state()
-        favorites = state.get("favorites", [])
-        real = os.path.realpath(script_path)
-        existing = [f for f in favorites if os.path.realpath(f) == real]
-        if existing:
-            for f in existing:
-                favorites.remove(f)
-        else:
-            favorites.append(script_path)
-        state["favorites"] = favorites
-        save_state(state)
+        with update_state() as state:
+            favorites = state.get("favorites", [])
+            real = os.path.realpath(script_path)
+            existing = [f for f in favorites if os.path.realpath(f) == real]
+            if existing:
+                for f in existing:
+                    favorites.remove(f)
+            else:
+                favorites.append(script_path)
+            state["favorites"] = favorites
 
     def populate(self, directory):
         self.current_path = directory
@@ -435,13 +434,13 @@ class HwnTools(Gtk.Window):
         at_effective_root = os.path.realpath(directory) == os.path.realpath(self.effective_root)
         fav_count = 0
         if at_effective_root:
-            state = load_state()
-            favorites = state.get("favorites", [])
+            favorites = load_state().get("favorites", [])
             valid_favorites = [f for f in favorites if os.path.exists(f)]
             if len(valid_favorites) != len(favorites):
-                state["favorites"] = valid_favorites
-                save_state(state)
-                favorites = valid_favorites
+                with update_state() as state:
+                    cur = state.get("favorites", [])
+                    state["favorites"] = [f for f in cur if os.path.exists(f)]
+                    favorites = state["favorites"]
             for fav_path in favorites:
                 is_dir = os.path.isdir(fav_path)
                 if is_dir:
@@ -859,13 +858,12 @@ class HwnTools(Gtk.Window):
     def on_configure(self, widget, event):
         if not self.ready:
             return
-        state = load_state()
         w, h = self.get_size()
-        state["main_width"] = w
-        state["main_height"] = h
-        state["main_x"] = event.x
-        state["main_y"] = event.y
-        save_state(state)
+        with update_state() as state:
+            state["main_width"] = w
+            state["main_height"] = h
+            state["main_x"] = event.x
+            state["main_y"] = event.y
 
     def on_search_folder_click(self, button, path):
         self.search_mode = False
@@ -923,9 +921,8 @@ class HwnTools(Gtk.Window):
             self.search_mode = False
             self.search_query = ""
             self.tree_mode = not self.tree_mode
-            s = load_state()
-            s["tree_mode"] = self.tree_mode
-            save_state(s)
+            with update_state() as s:
+                s["tree_mode"] = self.tree_mode
             if self.tree_mode:
                 self.populate_tree()
             else:

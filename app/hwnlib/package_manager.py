@@ -9,7 +9,7 @@ from .constants import PACKAGES_DIR
 from .git_packages import (
     _version_newer, _scan_installed_packages, _ensure_repo, _scan_repo_packages,
 )
-from .state import load_state, save_state
+from .state import load_state, update_state
 
 
 class PackageManager(Gtk.Window):
@@ -268,15 +268,13 @@ class PackageManager(Gtk.Window):
         return row
 
     def _on_script_toggled(self, checkbox, script_path):
-        state = load_state()
-        hidden = state.get("hidden_scripts", [])
-        if checkbox.get_active():
-            hidden = [h for h in hidden if h != script_path]
-        else:
-            if script_path not in hidden:
+        with update_state() as state:
+            hidden = state.get("hidden_scripts", [])
+            if checkbox.get_active():
+                hidden = [h for h in hidden if h != script_path]
+            elif script_path not in hidden:
                 hidden.append(script_path)
-        state["hidden_scripts"] = hidden
-        save_state(state)
+            state["hidden_scripts"] = hidden
         try:
             self.parent_win.parent_win.refresh_view()
         except Exception:
