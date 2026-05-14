@@ -1062,6 +1062,8 @@ class HwnTools(Gtk.Window):
         dialog.destroy()
 
     def on_script_click(self, button, script_path):
+        if not os.access(script_path, os.X_OK):
+            os.chmod(script_path, os.stat(script_path).st_mode | 0o755)
         config = parse_config(script_path)
         deps = config.get("deps", [])
         if deps:
