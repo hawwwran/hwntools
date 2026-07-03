@@ -35,6 +35,25 @@ app/
 - Clicking a script opens a VTE terminal window that runs it — supports interactive input, ANSI colors, full terminal features. Script output windows are **non-modal** (main window stays interactive) and **survive closing the main window** — the GTK main loop stays alive until every output window is closed, so running scripts are not killed when the user closes hwntools.
 - Folders first, then scripts, both sorted alphabetically
 
+## Script output window
+
+The terminal window opened for a script (`OutputDialog`) has two behaviors beyond running the script:
+
+### Free scrolling with smart autoscroll
+
+The view follows new output only while it is scrolled to the bottom. Scroll up and the view stays put no matter how much output arrives, so you can read while the script keeps writing. Scrolling back down to within a couple of rows of the bottom snaps to the bottom and re-engages following. Only downward movement snaps, so scrolling up from the bottom is never yanked back. Implemented in `_setup_smart_autoscroll` (replaces VTE's `scroll_on_output`); also applied to the dependency-install and git-auth terminals. Scrollback in `OutputDialog` is unlimited so the full history is available to save.
+
+### Save log
+
+A "Save log" button (bottom-right of the window) writes the full terminal history, including scrollback, to a file via a native save picker. The picker opens at the last used folder (remembered in `.state.json` under `log_dir`) when that path still exists, and defaults the filename to `<script>-<YYYYMMDD-HHMMSS>.log`.
+
+- If the script has already finished, the picker opens immediately.
+- If the script is still running, a dialog first asks whether to save the **current contents** once, or to **log continuously**.
+- Continuous logging writes the file live: the terminal buffer is rewritten to the file about once a second whenever it changed, so the log can be opened and read at any time while the script runs. It is finalized again on exit.
+- While logging continuously, the button changes to **"Stop logging"**. Clicking it flushes the final buffer and disarms.
+- If the log file is deleted while logging, logging stops (the file is not recreated) and the status says so.
+- Closing the window while logging flushes the final buffer first (the child dies with the pty).
+
 ## Script config
 
 Optional comment block after the shebang line:
@@ -192,7 +211,7 @@ The VBS launcher starts the WSLg anchor (`hwnlib/wslg_anchor.py`) before the app
 
 ## Window state
 
-The main window and script output window remember their size and position across launches. The active view mode (button/tree) is also persisted. All stored in `.state.json`.
+The main window and script output window remember their size and position across launches. The active view mode (button/tree) is also persisted. The last folder used to save a terminal log is remembered under `log_dir`. All stored in `.state.json`.
 
 ## Scripts needing root
 

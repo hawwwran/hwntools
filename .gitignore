@@ -1,6 +1,10 @@
 # App runtime
 app/.state.json
 .state.json
+app/.state.json.lock
+.state.json.lock
+app/.state.json.corrupt-*
+.state.json.corrupt-*
 __pycache__/
 app/packages/
 app/.packages/

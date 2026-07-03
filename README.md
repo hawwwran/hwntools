@@ -8,6 +8,7 @@ GTK script launcher with built-in terminal. Organize and run shell and Python sc
 
 - Scripts become clickable buttons with icons and labels
 - Built-in VTE terminal with full interactive support, ANSI colors
+- Output windows scroll freely while a script runs, and can save the terminal log to a file — once, or continuously to a live file you can open any time
 - Two views: button grid and tree view (toggle with Ctrl+T)
 - Fuzzy search — just start typing
 - Favorite scripts and folders — pinned to root with a star
