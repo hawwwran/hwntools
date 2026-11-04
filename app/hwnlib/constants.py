@@ -10,6 +10,7 @@ PACKAGES_DIR = os.path.join(APP_DIR, "packages")
 REPOS_DIR = os.path.join(APP_DIR, ".packages")
 STATE_FILE = os.path.join(APP_DIR, ".state.json")
 PLATFORM = "windows" if os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop") or os.environ.get("WSL_DISTRO_NAME") else "linux"
+IS_DEV_CHECKOUT = os.path.isdir(os.path.join(APP_DIR, "..", ".git")) or os.path.isfile(os.path.join(APP_DIR, "CLAUDE.md"))
 ICON_SIZE = Gtk.IconSize.BUTTON
 DEFAULT_SCRIPT_ICON = "text-x-script"
 DEFAULT_FOLDER_ICON = "folder"

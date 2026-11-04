@@ -21,7 +21,9 @@ app/
 │   ├── sources_manager.py    ← SourcesManager window
 │   ├── package_manager.py    ← PackageManager window
 │   ├── main_window.py        ← HwnTools main window
+│   ├── identity.py           ← app IDs, icon + .desktop install (taskbar icons)
 │   └── wslg_anchor.py        ← WSLg session anchor (hidden GTK window watchdog)
+├── icons/                   ← launcher and output-window app icons (SVG)
 ├── packages/                ← installed packages (gitignore)
 ├── .packages/               ← git repo clones, flat naming (gitignore)
 └── .state.json              ← auto-saved window size/position + config (gitignore)
@@ -171,7 +173,17 @@ On startup, the app checks for both package updates and app updates in a backgro
 
 ## App icon
 
-Both windows use `application-x-shellscript` as the taskbar icon.
+Two icons in `icons/`, one family: `com.hawwwran.hwntools.svg` (teal tile, grid of script buttons) for the launcher and every dialog it opens, and `com.hawwwran.hwntools.output.svg` (dark terminal with the launcher's teal title bar and prompt) for script output windows, which get a taskbar entry of their own.
+
+GNOME Shell on Wayland ignores `Gtk.Window.set_icon_name`. It takes the taskbar icon from the `.desktop` file whose name matches the window's app ID, so `hwnlib/identity.py` handles it:
+
+- `setup_app_identity()` (called once in `hwntools.py`, before the first window) sets the program name to `com.hawwwran.hwntools`, installs both icons into `~/.local/share/icons/hicolor/scalable/apps/` and both `.desktop` entries into `~/.local/share/applications/`, and adds `icons/` to the in-process icon search path.
+- GTK3 sends the program name as the Wayland `app_id` each time a toplevel maps. `OutputDialog.do_map` maps under `com.hawwwran.hwntools.output` and restores the name afterwards. On X11, `set_wmclass` sets the same IDs per window.
+- Dialogs with a transient parent always share the parent's taskbar entry, so only `OutputDialog` (non-transient) needs its own ID.
+- The launcher entry is visible in the applications menu; the output entry has `NoDisplay=true` and only exists for the taskbar. Both carry `StartupWMClass`.
+- A dev checkout (`IS_DEV_CHECKOUT`) refreshes the icons but writes a `.desktop` entry only when it is missing, so the menu keeps launching the installed copy. The installed copy rewrites its entries whenever their content (e.g. the `Exec` path) differs.
+- Nothing is installed on WSL: there the entries would show up in the Windows Start menu.
+- GNOME matches a window to an app when the window maps. On the very first launch the entries are written milliseconds before that, so that one run can still show the generic icon.
 
 ## UI details
 

@@ -30,6 +30,8 @@ python3 hwntools.py
 
 Dependencies (`python3`, `gir1.2-gtk-3.0`, `gir1.2-vte-2.91`) are auto-detected — if missing, the app prompts to install them.
 
+On launch it adds itself to the applications menu and installs its icons under `~/.local/share`, so the taskbar shows the HWN Tools icon and script output windows show their own variant of it.
+
 ### Windows (WSLg)
 
 Run `windows-setup.bat` to set up WSL dependencies and create a keyboard shortcut. Then launch via `hwntools.cmd` or `Ctrl+Shift+~`.

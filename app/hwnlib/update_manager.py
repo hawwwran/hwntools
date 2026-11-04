@@ -7,7 +7,7 @@ import zipfile
 
 from gi.repository import Gtk, Gdk, GLib
 
-from .constants import VERSION, APP_DIR
+from .constants import VERSION, APP_DIR, IS_DEV_CHECKOUT
 from .git_packages import _check_app_update, HWNTOOLS_DOWNLOAD
 
 
@@ -18,7 +18,6 @@ class UpdateManager(Gtk.Window):
         super().__init__(title="Update HWN Tools")
         self.set_transient_for(parent)
         self.set_modal(True)
-        self.set_icon_name("application-x-shellscript")
         self.set_default_size(400, -1)
         self.parent_win = parent
         self.destroyed = False
@@ -85,12 +84,11 @@ class UpdateManager(Gtk.Window):
             self.remote_label.set_markup(f'<span color="#cc3333">Check failed: {GLib.markup_escape_text(error)}</span>')
             return
         self.latest_version = remote_ver
-        is_dev = os.path.isdir(os.path.join(APP_DIR, "..", ".git")) or os.path.isfile(os.path.join(APP_DIR, "CLAUDE.md"))
         if has_update:
             self.remote_label.set_markup(
                 f"Latest version: <b><span color=\"#2e7d32\">v{remote_ver}</span></b> \u2014 update available!"
             )
-            if is_dev:
+            if IS_DEV_CHECKOUT:
                 self.status_label.set_markup('<span color="#cc3333">Development install detected. Update disabled.</span>')
             else:
                 self.update_btn.set_sensitive(True)

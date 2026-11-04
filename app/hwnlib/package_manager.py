@@ -20,7 +20,6 @@ class PackageManager(Gtk.Window):
         super().__init__(title=f"Package Manager \u2014 {url}")
         self.set_transient_for(parent)
         self.set_modal(True)
-        self.set_icon_name("application-x-shellscript")
         self.set_default_size(600, 500)
         self.repo = repo
         self.parent_win = parent

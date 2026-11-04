@@ -6,6 +6,7 @@ from gi.repository import Gtk, Gdk, Gio, Pango, GLib, Vte
 
 from .config import parse_config
 from .deps import check_dependencies
+from .identity import OUTPUT_APP_ID, program_name
 from .state import load_state, update_state
 
 
@@ -111,7 +112,6 @@ def _make_git_terminal(parent, title, command, on_success=None, on_failure=None,
     win = Gtk.Window(title=title)
     win.set_transient_for(parent)
     win.set_modal(True)
-    win.set_icon_name("application-x-shellscript")
     win.set_default_size(600, 350)
     failed = [False]  # track whether on_failure was already called
 
@@ -225,7 +225,6 @@ class InstallDialog(Gtk.Window):
         super().__init__(title=f"Install {dep_name}")
         self.set_transient_for(parent)
         self.set_modal(True)
-        self.set_icon_name("application-x-shellscript")
         self.set_default_size(500, 350)
         self.dep_name = dep_name
 
@@ -277,7 +276,6 @@ class DepDialog(Gtk.Window):
         super().__init__(title="Missing Dependencies")
         self.set_transient_for(parent)
         self.set_modal(True)
-        self.set_icon_name("application-x-shellscript")
         self.set_default_size(400, -1)
         self.parent_win = parent
         self.script_path = script_path
@@ -344,7 +342,10 @@ class OutputDialog(Gtk.Window):
 
     def __init__(self, parent, title, script_path):
         super().__init__(title=title)
-        self.set_icon_name("application-x-shellscript")
+        # Own taskbar entry and icon, apart from the launcher: X11 reads this
+        # WM_CLASS, Wayland the program name do_map sets.
+        self.set_wmclass(OUTPUT_APP_ID, OUTPUT_APP_ID)
+        self.set_icon_name(OUTPUT_APP_ID)
         self.parent_win = parent
         self.script_path = script_path
         self._exited = False
@@ -417,6 +418,10 @@ class OutputDialog(Gtk.Window):
             -1, None,
             None,
         )
+
+    def do_map(self):
+        with program_name(OUTPUT_APP_ID):
+            Gtk.Window.do_map(self)
 
     def on_child_exited(self, terminal, status):
         self._exited = True

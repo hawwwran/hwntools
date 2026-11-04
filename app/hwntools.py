@@ -55,9 +55,11 @@ if _MISSING_DEPS:
 
     _check_deps_and_exit()
 
+from hwnlib.identity import setup_app_identity
 from hwnlib.main_window import HwnTools
 from hwnlib.dialogs import _on_main_window_closed
 
+setup_app_identity()
 win = HwnTools()
 win.connect("destroy", lambda _w: _on_main_window_closed())
 win.show_all()

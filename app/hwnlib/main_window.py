@@ -12,6 +12,7 @@ from .constants import (
 from .deps import check_dependencies
 from .dialogs import OutputDialog, DepDialog
 from .git_packages import _check_repo_updates, _check_app_update
+from .identity import APP_ID
 from .sources_manager import SourcesManager
 from .state import load_state, update_state
 from .update_manager import UpdateManager
@@ -26,7 +27,8 @@ class HwnTools(Gtk.Window):
         self.set_default_size(w, h)
         if "main_x" in state and "main_y" in state:
             self.move(state["main_x"], state["main_y"])
-        self.set_icon_name("application-x-shellscript")
+        # X11 taskbar identity; Wayland takes it from the program name.
+        self.set_wmclass(APP_ID, APP_ID)
         self.current_path = ROOT_DIR
         self.effective_root = ROOT_DIR
         self.history = []

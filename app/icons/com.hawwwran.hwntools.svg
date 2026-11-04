@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Launcher: a grid of script buttons on the teal tile. The output-window
+       icon shares the tile, the teal and the prompt glyph, but inverts to a
+       dark terminal so the two stay apart at taskbar size. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="8" x2="0" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2cc9b4"/>
+      <stop offset="1" stop-color="#0f8a7e"/>
+    </linearGradient>
+    <linearGradient id="key" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e3f4f1"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="#0a5e57"/>
+  <rect x="8" y="8" width="112" height="108" rx="26" fill="url(#tile)"/>
+  <g fill="#0a5e57" opacity="0.35">
+    <rect x="24" y="27" width="36" height="36" rx="10"/>
+    <rect x="68" y="27" width="36" height="36" rx="10"/>
+    <rect x="24" y="71" width="36" height="36" rx="10"/>
+    <rect x="68" y="71" width="36" height="36" rx="10"/>
+  </g>
+  <g fill="url(#key)">
+    <rect x="24" y="24" width="36" height="36" rx="10"/>
+    <rect x="68" y="24" width="36" height="36" rx="10"/>
+    <rect x="24" y="68" width="36" height="36" rx="10"/>
+    <rect x="68" y="68" width="36" height="36" rx="10"/>
+  </g>
+  <g fill="none" stroke="#0f8a7e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M33 34l8 8-8 8"/>
+    <path d="M45 50h7"/>
+  </g>
+  <g fill="#9fd9d0">
+    <circle cx="86" cy="42" r="6"/>
+    <circle cx="42" cy="86" r="6"/>
+    <circle cx="86" cy="86" r="6"/>
+  </g>
+</svg>

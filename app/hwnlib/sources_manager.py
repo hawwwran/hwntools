@@ -21,7 +21,6 @@ class SourcesManager(Gtk.Window):
         super().__init__(title="Script Sources Manager")
         self.set_transient_for(parent)
         self.set_modal(True)
-        self.set_icon_name("application-x-shellscript")
         self.set_default_size(500, 450)
         self.parent_win = parent
         self.updates_available = getattr(parent, "updates_available", {})
