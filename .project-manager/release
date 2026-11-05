@@ -3,7 +3,7 @@
 #
 # Pushes the tag; GitHub Actions (.github/workflows/release.yml) stamps the version, builds
 # hwntools.zip from app/ and publishes the release with GitHub's own notes. The workflow
-# refuses a tag that is not on the tip of main, which the clone Project Manager makes is.
+# refuses a tag that is not on the tip of main, which the script checks before pushing.
 set -euo pipefail
 
 REPO="hawwwran/hwntools"
@@ -54,6 +54,12 @@ run() {
     if [ "${PM_DRY_RUN:-}" = 1 ]; then
         echo "::warn Dry run: $PM_TAG was made in the clone and not pushed"
         return 0
+    fi
+
+    # The workflow would refuse the tag after it is pushed, leaving a tag with no release.
+    if [ "$(git ls-remote origin "refs/heads/$PM_DEFAULT_BRANCH" | cut -f1)" != "$(git rev-parse HEAD)" ]; then
+        echo "::fail $PM_DEFAULT_BRANCH moved on GitHub since; start the release again. Nothing was pushed"
+        exit 1
     fi
 
     echo "::point-of-no-return"
