@@ -13,3 +13,6 @@ app/.packages/
 app/hwntools.vbs
 app/VERSION.md
 app/.claude/
+
+# IDE
+.idea/
