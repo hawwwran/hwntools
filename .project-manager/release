@@ -7,7 +7,8 @@
 set -euo pipefail
 
 REPO="hawwwran/hwntools"
-ASSET="hwntools.zip"
+WORKFLOW="release.yml"
+ASSETS=(hwntools.zip)
 
 describe() {
     cat <<'JSON'
@@ -48,6 +49,78 @@ check() {
     return "$ready"
 }
 
+missing_assets() {
+    local attached asset
+    attached=$(gh release view "$PM_TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
+    for asset in "${ASSETS[@]}"; do
+        grep -qx "$asset" <<<"$attached" || echo "$asset"
+    done
+}
+
+# Runs of the workflow on the tag, newest first. A tag push starts one with the tag as its branch.
+runs_on_tag() {
+    gh run list --repo "$REPO" --workflow "$WORKFLOW" --branch "$PM_TAG" --limit 20 --json databaseId,headBranch \
+        --jq ".[] | select(.headBranch == \"$PM_TAG\") | .databaseId" 2>/dev/null || true
+}
+
+# The newest run that was not there before the push: a removed release of the same tag left its own.
+new_run() {
+    local id
+    for id in $(runs_on_tag); do
+        grep -qxF "$id" <<<"$before" || { echo "$id"; return; }
+    done
+}
+
+# Follows the run the tag push started until the release has its files. Any other end is a
+# failure with the run's address, and the log of its failed steps in Project Manager's log.
+follow_release() {
+    local run="" state="" seen="" url missing asset
+    echo "::step Waiting for GitHub Actions to start $WORKFLOW"
+    for _ in $(seq 24); do
+        sleep 5
+        run=$(new_run)
+        [ -n "$run" ] && break
+    done
+    if [ -z "$run" ]; then
+        echo "::fail GitHub started no $WORKFLOW run for $PM_TAG in 2 minutes (https://github.com/$REPO/actions)." \
+            "Remove $PM_TAG on the project's page and release again"
+        exit 1
+    fi
+    url="https://github.com/$REPO/actions/runs/$run"
+    echo "Run: $url"
+
+    echo "::step Waiting for GitHub Actions to build ${ASSETS[*]}"
+    for _ in $(seq 120); do
+        state=$(gh run view "$run" --repo "$REPO" --json status,conclusion \
+            --jq 'if .status == "completed" then "completed \(.conclusion)" else .status end' 2>/dev/null || echo unknown)
+        [ "$state" != "$seen" ] && echo "Run $run: $state" && seen=$state
+        [[ "$state" == completed* ]] && break
+        sleep 5
+    done
+    case "$state" in
+        "completed success") ;;
+        completed*)
+            echo "The failed steps:"
+            gh run view "$run" --repo "$REPO" --log-failed 2>&1 | tail -n 80 || true
+            echo "::fail $WORKFLOW ended with ${state#completed }: $url. Remove $PM_TAG on the project's page," \
+                "fix it and release again"
+            exit 1 ;;
+        *)
+            echo "::fail $WORKFLOW is still running after 10 minutes: $url"
+            exit 1 ;;
+    esac
+
+    missing=$(missing_assets)
+    if [ -n "$missing" ]; then
+        echo "::fail $WORKFLOW succeeded, but the release lacks ${missing//$'\n'/ }: $url"
+        exit 1
+    fi
+    for asset in "${ASSETS[@]}"; do
+        echo "Download: https://github.com/$REPO/releases/latest/download/$asset"
+    done
+    echo "::url $(gh release view "$PM_TAG" --repo "$REPO" --json url --jq .url)"
+}
+
 run() {
     echo "::step Tagging $PM_TAG"
     git tag -a "$PM_TAG" -m "Release $PM_TAG"
@@ -61,6 +134,7 @@ run() {
         echo "::fail $PM_DEFAULT_BRANCH moved on GitHub since; start the release again. Nothing was pushed"
         exit 1
     fi
+    before=$(runs_on_tag)
 
     echo "::point-of-no-return"
     echo "::step Pushing $PM_TAG"
@@ -68,19 +142,7 @@ run() {
         echo "::fail Pushing $PM_TAG failed; nothing was pushed"
         exit 1
     fi
-
-    echo "::step Waiting for GitHub Actions to build $ASSET"
-    for _ in $(seq 60); do
-        sleep 5
-        assets=$(gh release view "$PM_TAG" --repo "$REPO" --json assets --jq '.assets[].name' 2>/dev/null || true)
-        if grep -qx "$ASSET" <<<"$assets"; then
-            echo "Download: https://github.com/$REPO/releases/latest/download/$ASSET"
-            echo "::url $(gh release view "$PM_TAG" --repo "$REPO" --json url --jq .url)"
-            return 0
-        fi
-    done
-    echo "::warn $PM_TAG is pushed, but $ASSET was not attached within 5 minutes; GitHub Actions may still be building"
-    echo "::url https://github.com/$REPO/actions"
+    follow_release
 }
 
 case "${1:-}" in
